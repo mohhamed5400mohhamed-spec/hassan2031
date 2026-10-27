@@ -1,0 +1,48 @@
+{
+  "token_1792367433333_llnoxcr": {
+    "sessionToken": "token_1792367433333_llnoxcr",
+    "user": {
+      "id": "qQJeA_Hj-EulKvnaAAAI",
+      "username": "زائر اختبار",
+      "room": "الغرفة العامة",
+      "avatarSeed": "زائر اختبار",
+      "statusQuote": "زائر",
+      "flag": "🇾🇪",
+      "role": "guest",
+      "likes": 100,
+      "points": 500,
+      "isVoice": false,
+      "micSlot": null,
+      "isMuted": false,
+      "isTextMuted": false,
+      "isSpeaking": false,
+      "presenceState": "online",
+      "ipAddress": "77.113.69.223",
+      "deviceInfo": "جهاز لينكس (Linux)",
+      "deviceFingerprint": "FP-70B6-D59D-M6K6",
+      "isJailed": false,
+      "joinedAt": 1792367433333,
+      "sessionToken": "token_1792367433333_llnoxcr",
+      "lastActiveTime": 1792367433333,
+      "nameColor": "#d97706",
+      "textColor": "#0f172a",
+      "nameGradient": "from-amber-400 to-yellow-200",
+      "theme": "golden-brown-harmony",
+      "fontFamily": "Noto Naskh Arabic",
+      "wallpaper": "default",
+      "bubbleStyle": "modern",
+      "fontSize": "base",
+      "engagement": {
+        "activeTimeMinutes": 0,
+        "messagesSent": 0,
+        "wallPostsCount": 0,
+        "micTimeMinutes": 0,
+        "starsLevel": 0,
+        "progressPercent": 0
+      }
+    },
+    "currentSocketId": "qQJeA_Hj-EulKvnaAAAI",
+    "lastActiveTime": 1792367433333,
+    "isExplicitlyLoggedOut": false
+  }
+}
