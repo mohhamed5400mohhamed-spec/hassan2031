@@ -371,6 +371,15 @@ export default function App() {
     messageRetentionLimitsRef.current = messageRetentionLimits;
   }, [messageRetentionLimits]);
 
+  // Periodic 30s ticker to automatically update relative times ("الآن", "منذ 5 دقائق", "منذ ساعة", etc.) live without page reload
+  const [, setRelativeTimeTicker] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setRelativeTimeTicker((t) => (t + 1) % 1000000);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Keep the login screen hidden until the server's shared appearance has loaded.
   // This prevents the local default banner/theme from flashing before MongoDB data arrives.
   const [appearanceReady, setAppearanceReady] = useState(false);
@@ -1286,65 +1295,86 @@ export default function App() {
     }, 4000);
   };
 
-  // Reliable helper to format message time properly in Arabic
-  const formatMessageTime = (msg: { time?: string; timestamp?: number }) => {
-    if (msg.timestamp) {
-      try {
-        return new Date(msg.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
-      } catch {}
+  // Reusable Arabic relative time formatter for Room Messages, Wall, and Private Messages
+  // (الآن، منذ دقيقة، منذ X دقائق، منذ ساعة، منذ 2 ساعات، منذ X ساعات، منذ يوم، إلخ)
+  const formatAppRelativeTime = (timestamp?: number, fallbackTime?: string, id?: string): string => {
+    let effectiveTs = timestamp;
+    if (!effectiveTs && id) {
+      if (id.startsWith('msg-')) {
+        const parsed = Number(id.replace('msg-', ''));
+        if (parsed && !isNaN(parsed)) effectiveTs = parsed;
+      } else if (id.startsWith('pm-')) {
+        const parts = id.split('-');
+        const parsed = Number(parts[1]);
+        if (parsed && !isNaN(parsed)) effectiveTs = parsed;
+      } else if (id.startsWith('post-')) {
+        const parsed = Number(id.replace('post-', ''));
+        if (parsed && !isNaN(parsed)) effectiveTs = parsed;
+      } else if (id.startsWith('cm-')) {
+        const parts = id.split('-');
+        const parsed = Number(parts[1]);
+        if (parsed && !isNaN(parsed)) effectiveTs = parsed;
+      }
     }
-    if (msg.time && msg.time !== '0د' && msg.time !== 'الآن') {
-      return msg.time;
-    }
-    try {
-      return new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return 'الآن';
-    }
-  };
 
-  // Smart and accurate time formatting for Wall posts & comments (الآن، منذ ٥ دقائق، اليوم ٠٩:٣٠ ص، أمس، التاريخ)
-  const formatWallTime = (timestamp?: number, fallbackTime?: string) => {
-    if (!timestamp) {
-      if (fallbackTime && fallbackTime !== 'الآن') return fallbackTime;
+    if (!effectiveTs || isNaN(effectiveTs) || effectiveTs <= 0) {
+      if (fallbackTime && fallbackTime !== '0د' && fallbackTime !== 'الآن') {
+        return fallbackTime;
+      }
       return 'الآن';
     }
+
     const now = Date.now();
-    const diffSec = Math.max(0, Math.floor((now - timestamp) / 1000));
-    if (diffSec < 60) return 'الآن';
+    const diffSec = Math.max(0, Math.floor((now - effectiveTs) / 1000));
+
+    // أقل من دقيقة
+    if (diffSec < 60) {
+      return 'الآن';
+    }
+
     const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `منذ ${diffMin} د`;
+
+    // إذا كان دقائق (أقل من ساعة)
+    if (diffMin < 60) {
+      if (diffMin === 1) {
+        return 'منذ دقيقة';
+      }
+      return `منذ ${diffMin} دقائق`;
+    }
+
     const diffHours = Math.floor(diffMin / 60);
+
+    // إذا كان ساعات (أقل من 24 ساعة)
     if (diffHours < 24) {
-      try {
-        const timeStr = new Date(timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
-        return `اليوم ${timeStr}`;
-      } catch {
-        return `منذ ${diffHours} س`;
+      if (diffHours === 1) {
+        return 'منذ ساعة';
       }
+      return `منذ ${diffHours} ساعات`;
     }
+
     const diffDays = Math.floor(diffHours / 24);
+
+    // إذا كان أيام
     if (diffDays === 1) {
-      try {
-        const timeStr = new Date(timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
-        return `أمس ${timeStr}`;
-      } catch {
-        return 'أمس';
-      }
+      return 'منذ يوم';
     }
-    if (diffDays < 7) {
+    if (diffDays === 2) {
+      return 'منذ يومين';
+    }
+    if (diffDays <= 10) {
       return `منذ ${diffDays} أيام`;
     }
-    try {
-      return new Date(timestamp).toLocaleDateString('ar-EG', {
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch {
-      return fallbackTime || 'سابقاً';
-    }
+    return `منذ ${diffDays} يوم`;
+  };
+
+  // Reliable helper to format room and private message time
+  const formatMessageTime = (msg: { id?: string; time?: string; timestamp?: number }) => {
+    return formatAppRelativeTime(msg.timestamp, msg.time, msg.id);
+  };
+
+  // Accurate time formatting for Wall posts & comments
+  const formatWallTime = (timestamp?: number, fallbackTime?: string, id?: string) => {
+    return formatAppRelativeTime(timestamp, fallbackTime, id);
   };
 
   // 100% Reliable Auto-Scroll to latest messages (Direct scrollTop without outer window jumping)
@@ -6781,7 +6811,10 @@ export default function App() {
 
                     {/* Consolidated Actions: Time + Single Dropdown Menu (⋮) */}
                     <div className="flex items-center gap-1.5 flex-shrink-0 relative">
-                      <span className="text-[11px] text-slate-400 font-mono font-medium select-none">
+                      <span
+                        className="text-[11px] text-slate-400 font-mono font-medium select-none"
+                        title={msg.timestamp ? new Date(msg.timestamp).toLocaleString('ar-EG') : undefined}
+                      >
                         {formatMessageTime(msg)}
                       </span>
 
@@ -8998,7 +9031,7 @@ export default function App() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] text-slate-400 font-mono" title={post.timestamp ? new Date(post.timestamp).toLocaleString('ar-EG') : undefined}>
-                          {formatWallTime(post.timestamp, post.time)}
+                          {formatWallTime(post.timestamp, post.time, post.id)}
                         </span>
                         {currentUser && (post.username.toLowerCase() === currentUser.username.toLowerCase() || currentUser.role === 'admin' || currentUser.role === 'super') && (
                           <div className="flex items-center gap-1.5">
@@ -9180,7 +9213,7 @@ export default function App() {
                                     )}
                                   </div>
                                   <span className="font-mono text-[10px] text-slate-400" title={cm.timestamp ? new Date(cm.timestamp).toLocaleString('ar-EG') : undefined}>
-                                    {formatWallTime(cm.timestamp, cm.time)}
+                                    {formatWallTime(cm.timestamp, cm.time, cm.id)}
                                   </span>
                                 </div>
                                 <div className="text-slate-700 leading-snug [overflow-wrap:anywhere] break-words" dir="auto">
@@ -9568,8 +9601,8 @@ export default function App() {
                           </div>
 
                           <div className="flex flex-col items-end gap-1 flex-shrink-0 text-left">
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {lastMsg ? lastMsg.time : ''}
+                            <span className="text-[10px] text-slate-400 font-mono" title={lastMsg?.timestamp ? new Date(lastMsg.timestamp).toLocaleString('ar-EG') : undefined}>
+                              {lastMsg ? formatMessageTime(lastMsg) : ''}
                             </span>
                             {unread > 0 ? (
                               <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black animate-pulse shadow-xs">
@@ -9919,7 +9952,7 @@ export default function App() {
                             )}
 
                             <div className={`text-[9px] font-mono mt-1 flex items-center gap-1.5 ${isMe ? 'text-amber-300/70 justify-end' : 'text-slate-400 justify-start'}`}>
-                              <span>{formatMessageTime(pm)}</span>
+                              <span title={pm.timestamp ? new Date(pm.timestamp).toLocaleString('ar-EG') : undefined}>{formatMessageTime(pm)}</span>
                               {isMe && (
                                 <span className="inline-flex items-center gap-0.5 select-none">
                                   {pm.status === 'read' ? (
