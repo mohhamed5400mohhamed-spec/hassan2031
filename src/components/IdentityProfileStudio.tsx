@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Award,
   Sparkles,
@@ -17,7 +17,9 @@ import {
   UserCheck,
   Zap,
   TrendingUp,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import confetti from '../utils/confetti';
 
@@ -64,6 +66,14 @@ export const IdentityProfileStudio: React.FC<IdentityProfileStudioProps> = ({
   const [newQuote, setNewQuote] = useState(currentUser.statusQuote || '');
   const [dailyStreakDay, setDailyStreakDay] = useState(4);
   const [streakClaimedToday, setStreakClaimedToday] = useState(false);
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
+
+  const scrollTabs = (direction: 'left' | 'right') => {
+    if (tabsContainerRef.current) {
+      const offset = direction === 'left' ? -160 : 160;
+      tabsContainerRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+    }
+  };
 
   // VIP Friends Demo
   const [friendsList, setFriendsList] = useState<string[]>(['أبو صقر', 'أميرة الصمت', 'فارس قريش']);
@@ -200,26 +210,26 @@ export const IdentityProfileStudio: React.FC<IdentityProfileStudioProps> = ({
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-base font-extrabold bg-gradient-to-r ${nameGradient} bg-clip-text text-transparent`}>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-base font-extrabold bg-gradient-to-r ${nameGradient} bg-clip-text text-transparent truncate max-w-full`}>
                     {currentUser.username}
                   </span>
-                  <span className="text-xs">{userMood}</span>
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md">
+                  <span className="text-xs shrink-0">{userMood}</span>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md shrink-0">
                     {currentUser.role === 'admin' ? 'مدير عام 👑' : currentUser.role === 'super' ? 'سوبر مشرف 🛡️' : 'عضو حسان برو 🦅'}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 mt-0.5">
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   {(!currentUser.room || currentUser.room === 'خارج الغرف' || currentUser.room.trim() === '') ? (
-                    <span className="text-[11px] bg-emerald-950/80 text-emerald-300 border border-emerald-600/50 px-2.5 py-0.5 rounded-md font-bold flex items-center gap-1">
+                    <span className="text-[11px] bg-emerald-950/80 text-emerald-300 border border-emerald-600/50 px-2.5 py-0.5 rounded-md font-bold flex items-center gap-1 shrink-0">
                       <span>التواجد:</span>
                       <strong className="text-emerald-100 font-extrabold">في بهو الغرف 📋</strong>
                     </span>
                   ) : (
-                    <span className="text-[11px] bg-indigo-950/70 text-indigo-300 border border-indigo-700/50 px-2.5 py-0.5 rounded-md font-bold flex items-center gap-1">
+                    <span className="text-[11px] bg-indigo-950/70 text-indigo-300 border border-indigo-700/50 px-2.5 py-0.5 rounded-md font-bold flex items-center gap-1 shrink-0 max-w-[200px] truncate">
                       <span>الغرفة الحالية:</span>
-                      <strong className="text-white font-extrabold">{currentUser.room}</strong>
+                      <strong className="text-white font-extrabold truncate">{currentUser.room}</strong>
                     </span>
                   )}
                 </div>
@@ -230,7 +240,7 @@ export const IdentityProfileStudio: React.FC<IdentityProfileStudioProps> = ({
             </div>
 
             {/* Level & XP bar */}
-            <div className="w-full sm:w-48 bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60 space-y-1">
+            <div className="w-full sm:w-48 bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60 space-y-1 shrink-0">
               <div className="flex justify-between text-[11px]">
                 <span className="text-amber-400 font-bold flex items-center gap-1">
                   <TrendingUp className="w-3 h-3" />
@@ -248,33 +258,56 @@ export const IdentityProfileStudio: React.FC<IdentityProfileStudioProps> = ({
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-slate-800 bg-slate-950/70 px-3 overflow-x-auto gap-1 py-1.5 scrollbar-none">
-          {[
-            { id: 'frames', label: 'إطارات الصورة', icon: Crown },
-            { id: 'mood', label: 'المزاج والحالة', icon: Smile },
-            { id: 'name', label: 'ألوان وتدرج الاسم', icon: Palette },
-            { id: 'badges', label: 'الأوسمة الشرفية', icon: Award },
-            { id: 'streak', label: 'المكافأة اليومية', icon: Calendar },
-            { id: 'friends', label: 'الأصدقاء المقربون VIP', icon: Users },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap transition-all ${
-                  isActive
-                    ? 'bg-purple-600 text-white font-bold shadow-md'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {tab.label}
-              </button>
-            );
-          })}
+        {/* Tab Navigation with Left/Right Arrows for effortless scrolling */}
+        <div className="relative flex items-center border-b border-slate-800 bg-slate-950/80 px-1 py-1.5 min-w-0">
+          <button
+            type="button"
+            onClick={() => scrollTabs('right')}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 shrink-0 transition-colors cursor-pointer"
+            title="تمرير لليمين"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          
+          <div
+            ref={tabsContainerRef}
+            className="flex-1 flex overflow-x-auto gap-1 px-1 py-0.5 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent touch-pan-x flex-nowrap min-w-0 overscroll-contain"
+          >
+            {[
+              { id: 'frames', label: 'إطارات الصورة', icon: Crown },
+              { id: 'mood', label: 'المزاج والحالة', icon: Smile },
+              { id: 'name', label: 'ألوان وتدرج الاسم', icon: Palette },
+              { id: 'badges', label: 'الأوسمة الشرفية', icon: Award },
+              { id: 'streak', label: 'المكافأة اليومية', icon: Calendar },
+              { id: 'friends', label: 'الأصدقاء المقربون VIP', icon: Users },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-purple-600 text-white font-bold shadow-md'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => scrollTabs('left')}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 shrink-0 transition-colors cursor-pointer"
+            title="تمرير لليسار"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Content Area */}

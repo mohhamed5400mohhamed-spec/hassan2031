@@ -8702,7 +8702,7 @@ export default function App() {
               </div>
 
               {/* Horizontal Stories Carousel */}
-              <div className="flex items-center gap-3 overflow-x-auto py-1 no-horizontal-overflow">
+              <div className="flex items-center gap-3 overflow-x-auto py-1 touch-pan-x scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent overscroll-contain">
                 {/* Current User Story (+) Slot */}
                 <div className="flex flex-col items-center flex-shrink-0">
                   <div className="relative group">
@@ -10874,7 +10874,7 @@ export default function App() {
 
         {/* 7. MEMBER PROFILE MODAL (Matching Screenshots 10 & 11) */}
         {activeDrawer === 'profile' && profileTargetUser && (
-          <div className={`absolute inset-y-0 right-0 w-[92%] sm:w-[86%] max-w-md h-full ${curTheme.drawerBg} text-slate-100 z-40 shadow-2xl border-l ${curTheme.cardBorder} flex flex-col min-h-0 overflow-hidden animate-in slide-in-from-right duration-200 text-right`}>
+          <div className={`fixed sm:absolute inset-y-0 right-0 w-full sm:w-[86%] sm:max-w-md h-full ${curTheme.drawerBg} text-slate-100 z-40 shadow-2xl border-l ${curTheme.cardBorder} flex flex-col min-h-0 overflow-hidden animate-in slide-in-from-right duration-200 text-right box-border`}>
             {/* Header bar with user's name decoration and Close button [ ✖ ] */}
             <div className={`shrink-0 ${curTheme.drawerHeaderBg || curTheme.headerBg} ${curTheme.accentText} pt-[max(0.625rem,env(safe-area-inset-top))] px-3 py-2.5 flex items-center justify-between border-b ${curTheme.headerBorder}`}>
               <span className="font-bold text-sm truncate max-w-[200px]">{profileTargetUser.username}</span>
@@ -10888,9 +10888,9 @@ export default function App() {
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto modal-scroll-container overscroll-contain">
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden modal-scroll-container overscroll-contain max-w-full box-border">
               {/* Cover with Rose Pattern Background (Screenshots 10 & 11) */}
-              <div className="relative bg-gradient-to-b from-slate-200 to-white p-4 border-b text-center">
+              <div className="relative bg-gradient-to-b from-slate-200 to-white p-3 sm:p-4 border-b text-center max-w-full overflow-hidden">
                 <div className="relative inline-block mb-2">
                   <img
                     src={profileTargetUser.avatarUrl || falconIcon}
@@ -10902,22 +10902,22 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="font-bold text-base text-slate-900 flex flex-col items-center justify-center gap-1.5">
+                <div className="font-bold text-base text-slate-900 flex flex-col items-center justify-center gap-1.5 max-w-full px-1">
                   {profileTargetUser.nameBannerUrl ? (
-                    <div className="flex flex-col items-center gap-1">
+                    <div className="flex flex-col items-center gap-1 max-w-full">
                       <img
                         src={profileTargetUser.nameBannerUrl}
                         alt={profileTargetUser.username}
                         title={profileTargetUser.username}
-                        className="h-8 max-h-[38px] max-w-[260px] object-contain drop-shadow-md rounded"
+                        className="h-8 max-h-[38px] max-w-[240px] sm:max-w-[260px] w-auto object-contain drop-shadow-md rounded"
                       />
                       <span className="text-[11px] text-slate-600 font-bold">({profileTargetUser.username})</span>
                     </div>
                   ) : (
-                    <span className="text-slate-900 font-black">{profileTargetUser.username}</span>
+                    <span className="text-slate-900 font-black truncate max-w-full">{profileTargetUser.username}</span>
                   )}
 
-                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                  <div className="flex items-center justify-center gap-1.5 flex-wrap max-w-full">
                     {profileTargetUser.giftBadges && profileTargetUser.giftBadges.length > 0 && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 rounded-full border border-amber-300 shadow-2xs">
                         {profileTargetUser.giftBadges.map((badgeUrl, bIdx) => (
@@ -10940,7 +10940,7 @@ export default function App() {
                     </span>
                   </div>
                 </div>
-                <div className="text-xs text-slate-600 mt-0.5">{profileTargetUser.statusQuote}</div>
+                <div className="text-xs text-slate-600 mt-0.5 line-clamp-2 px-2">{profileTargetUser.statusQuote}</div>
 
                 {/* Target Role Badge */}
                 <div className="flex items-center justify-center gap-1.5 my-1.5">
@@ -10963,7 +10963,7 @@ export default function App() {
                   const progressPct = typeof eng.progressPercent === 'number' ? eng.progressPercent : 50;
 
                   return (
-                    <div className="my-2 p-2.5 bg-gradient-to-b from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 rounded-xl space-y-1.5 shadow-xs">
+                    <div className="my-2 p-2.5 bg-gradient-to-b from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 rounded-xl space-y-1.5 shadow-xs max-w-full">
                       <div className="flex items-center justify-between text-[11px] font-bold text-amber-900">
                         <span className="flex items-center gap-1">
                           <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
@@ -11015,17 +11015,17 @@ export default function App() {
                       </div>
 
                       {/* Engagement Metrics Chips */}
-                      <div className="grid grid-cols-2 gap-1 pt-1 text-[10px] text-slate-600 font-semibold text-center">
-                        <span className="bg-white/80 border border-slate-200 rounded px-1 py-0.5" title="دقائق التواجد النشط في الشات">
+                      <div className="grid grid-cols-2 gap-1 pt-1 text-[10px] text-slate-600 font-semibold text-center w-full">
+                        <span className="bg-white/80 border border-slate-200 rounded px-1 py-0.5 truncate" title="دقائق التواجد النشط في الشات">
                           ⏱️ التواجد: {eng.activeTimeMinutes || 0} د
                         </span>
-                        <span className="bg-white/80 border border-slate-200 rounded px-1 py-0.5" title="عدد الرسائل المرسلة">
+                        <span className="bg-white/80 border border-slate-200 rounded px-1 py-0.5 truncate" title="عدد الرسائل المرسلة">
                           💬 الرسائل: {eng.messagesSent || 0}
                         </span>
-                        <span className="bg-white/80 border border-slate-200 rounded px-1 py-0.5" title="المنشورات والخواطر على الحائط">
+                        <span className="bg-white/80 border border-slate-200 rounded px-1 py-0.5 truncate" title="المنشورات والخواطر على الحائط">
                           📝 الحائط: {eng.wallPostsCount || 0}
                         </span>
-                        <span className="bg-white/80 border border-slate-200 rounded px-1 py-0.5" title="دقائق التحدث أو الصعود على المايك">
+                        <span className="bg-white/80 border border-slate-200 rounded px-1 py-0.5 truncate" title="دقائق التحدث أو الصعود على المايك">
                           🎙️ المايك: {eng.micTimeMinutes || 0} د
                         </span>
                       </div>
@@ -11034,27 +11034,27 @@ export default function App() {
                 })()}
 
                 {/* Points & Stats Banner */}
-                <div className="flex items-center justify-center gap-4 text-xs font-bold text-slate-700">
-                  <span className="text-rose-600 flex items-center gap-1">
+                <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-xs font-bold text-slate-700 max-w-full px-1">
+                  <span className="text-rose-600 flex items-center gap-1 shrink-0">
                     <Heart className="w-3.5 h-3.5 fill-rose-600" />
                     {profileTargetUser.likes} لايك
                   </span>
                   {(!profileTargetUser.room || profileTargetUser.room === 'خارج الغرف' || profileTargetUser.room.trim() === '') ? (
-                    <span className="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                    <span className="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs shrink-0">
                       <span>التواجد:</span>
                       <span>في بهو الشات 📋</span>
                     </span>
                   ) : (
-                    <span className="text-slate-700 font-bold bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                    <span className="text-slate-700 font-bold bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs max-w-[170px] truncate shrink-0">
                       <span>الغرفة:</span>
-                      <span className="text-indigo-700 font-black">{profileTargetUser.room}</span>
+                      <span className="text-indigo-700 font-black truncate">{profileTargetUser.room}</span>
                     </span>
                   )}
-                  <span className="text-indigo-600 font-mono">1M نقطة</span>
+                  <span className="text-indigo-600 font-mono shrink-0">1M نقطة</span>
                 </div>
               </div>
 
-              {/* Universal Like Profile Button (متاح لجميع الأعضاء والمشرفين والإداريين - مرة بالدقيقة ويعطي لايك واحد مع تنبيه عائم) */}
+              {/* Universal Like Profile Button */}
               {currentUser && currentUser.username !== profileTargetUser.username && (
                 <div className="px-3 pt-3">
                   <button
@@ -11069,22 +11069,22 @@ export default function App() {
               )}
 
               {/* ACTION BUTTONS & FORMS GOVERNED BY ROLE PERMISSIONS */}
-              <div className="p-3 space-y-3">
+              <div className="p-3 space-y-3 max-w-full box-border">
                 
                 {/* CASE 1: VIEWER IS A REGULAR MEMBER OR GUEST */}
                 {currentUser.role !== 'admin' && currentUser.role !== 'super' && (
                   <div className="space-y-3">
                     <div className="text-xs font-bold text-slate-700">تفاعل اجتماعي مع العضو:</div>
-                    <div className="grid grid-cols-3 gap-1.5 text-[11px] font-bold text-center">
+                    <div className="grid grid-cols-3 gap-1.5 text-[10.5px] sm:text-xs font-bold text-center w-full min-w-0">
                       <button
                         onClick={() => {
                           setSelectedPmUser(profileTargetUser);
                           setActiveDrawer('pm');
                         }}
-                        className="p-2.5 rounded bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800 cursor-pointer"
+                        className="p-2 sm:p-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800 cursor-pointer min-w-0 truncate"
                       >
-                        <MessageCircle className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>💬 محادثة خاصة</span>
+                        <MessageCircle className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span className="truncate">💬 خاص</span>
                       </button>
 
                       <button
@@ -11093,18 +11093,18 @@ export default function App() {
                           setActiveDrawer('none');
                           showToast(`تمت إضافة منشن @${profileTargetUser.username} لحقل الكتابة 🔔`, 'info');
                         }}
-                        className="p-2.5 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 flex items-center justify-center gap-1 text-amber-900 font-bold cursor-pointer"
+                        className="p-2 sm:p-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 flex items-center justify-center gap-1 text-amber-900 font-bold cursor-pointer min-w-0 truncate"
                       >
-                        <AtSign className="w-3.5 h-3.5 text-amber-600" />
-                        <span>🔔 إشارة @ بالاسم</span>
+                        <AtSign className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span className="truncate">🔔 منشن</span>
                       </button>
 
                       <button
                         onClick={() => handleLikeUserProfile(profileTargetUser.username)}
-                        className="p-2.5 rounded bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center justify-center gap-1 text-rose-600 font-black cursor-pointer"
+                        className="p-2 sm:p-2.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center justify-center gap-1 text-rose-600 font-black cursor-pointer min-w-0 truncate"
                       >
-                        <Heart className="w-3.5 h-3.5 fill-rose-600" />
-                        <span>❤️ إهداء لايك</span>
+                        <Heart className="w-3.5 h-3.5 fill-rose-600 shrink-0" />
+                        <span className="truncate">❤️ لايك</span>
                       </button>
 
                       <button
@@ -11113,10 +11113,10 @@ export default function App() {
                           showToast(`تم إرسال الهدية لـ ${profileTargetUser.username} 💎`, 'success');
                           confetti({ particleCount: 50, spread: 70 });
                         }}
-                        className="p-2.5 rounded bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center justify-center gap-1 text-amber-700 cursor-pointer"
+                        className="p-2 sm:p-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center justify-center gap-1 text-amber-700 cursor-pointer min-w-0 truncate"
                       >
-                        <Gift className="w-3.5 h-3.5" />
-                        <span>💎 إرسال هدية</span>
+                        <Gift className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">💎 هدية</span>
                       </button>
 
                       <button
@@ -11130,9 +11130,9 @@ export default function App() {
                           } catch (e) {}
                           showToast(`تمت إضافة ${profileTargetUser.username} لقائمة أصدقائك المقربين VIP ⭐`, 'success');
                         }}
-                        className="p-2 rounded bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800 cursor-pointer"
+                        className="p-2 sm:p-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800 cursor-pointer min-w-0 truncate"
                       >
-                        <span>⭐ إضافة صديق</span>
+                        <span className="truncate">⭐ صديق</span>
                       </button>
 
                       <button
@@ -11140,16 +11140,16 @@ export default function App() {
                           socket?.emit('chatMessage', { text: `💌 أرسل [${currentUser.username}] بطاقة تحية ومودة إلى [${profileTargetUser.username}] 🌹` });
                           showToast(`تم إرسال بطاقة تحية ومودة إلى ${profileTargetUser.username} 💌`, 'success');
                         }}
-                        className="p-2 rounded bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800 cursor-pointer"
+                        className="p-2 sm:p-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800 cursor-pointer min-w-0 truncate"
                       >
-                        <span>✉ إرسال تحية</span>
+                        <span className="truncate">✉ تحية</span>
                       </button>
 
                       <button
                         onClick={() => showToast(`المعلومات: مسجل بحسان برو • الدولة: ${profileTargetUser.flag} • الحالة: ${profileTargetUser.statusQuote || 'عضو مميز'}`, 'info')}
-                        className="p-2 rounded bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800 cursor-pointer"
+                        className="p-2 sm:p-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800 cursor-pointer min-w-0 truncate"
                       >
-                        <span>🔍 كشف النكات</span>
+                        <span className="truncate">🔍 كشف النكات</span>
                       </button>
 
                       {/* Ignore / Unignore Member Button */}
@@ -11157,22 +11157,22 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => toggleIgnoreUser(profileTargetUser.username)}
-                          className={`p-2 rounded border flex items-center justify-center gap-1 font-bold transition-all cursor-pointer ${
+                          className={`p-2 sm:p-2.5 rounded-lg border flex items-center justify-center gap-1 font-bold transition-all cursor-pointer min-w-0 truncate ${
                             isUserIgnored(profileTargetUser.username)
                               ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
                               : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300'
                           }`}
                           title={isUserIgnored(profileTargetUser.username) ? 'إلغاء تجاهل العضو' : 'تجاهل العضو ومنع ظهور رسائله'}
                         >
-                          <UserX className="w-3.5 h-3.5" />
-                          <span>{isUserIgnored(profileTargetUser.username) ? 'إلغاء التجاهل ✔️' : '🚫 تجاهل'}</span>
+                          <UserX className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{isUserIgnored(profileTargetUser.username) ? 'إلغاء التجاهل' : '🚫 تجاهل'}</span>
                         </button>
                       )}
                     </div>
 
                     {/* Member Info Callout */}
-                    <div className="p-2.5 bg-slate-50 border rounded-lg text-slate-600 text-[11px] leading-relaxed flex items-start gap-2">
-                      <Lock className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                    <div className="p-2.5 bg-slate-50 border rounded-lg text-slate-600 text-[11px] leading-relaxed flex items-start gap-2 max-w-full">
+                      <Lock className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                       <div>
                         الخصائص الإشرافية والإدارية كـ (<strong>حذف الصور</strong>، <strong>طرد الأعضاء</strong>، <strong>تعديل البيانات</strong>، و<strong>إسكات المستخدمين</strong>) متاحة فقط للإدارة والمشرفين (Admin / Super).
                       </div>
@@ -11186,43 +11186,43 @@ export default function App() {
                     {/* Check if target is Admin or another Super (Protected Hierarchy) */}
                     {(profileTargetUser.role === 'admin' || profileTargetUser.role === 'super') ? (
                       <div className="space-y-2.5">
-                        <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-950 text-xs flex items-start gap-2">
-                          <Shield className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-950 text-xs flex items-start gap-2 max-w-full">
+                          <Shield className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                           <div>
                             <strong>رتبة محمية ({getRoleBadge(profileTargetUser.role).title}):</strong> لا يملك المشرف صلاحية تطبيق عقوبات أو تعديل بيانات رتبة مساوية أو أعلى منه وفقاً لنظام الصلاحيات.
                           </div>
                         </div>
 
                         {/* Social Interactions Available */}
-                        <div className="grid grid-cols-3 gap-1.5 text-xs font-bold text-center">
+                        <div className="grid grid-cols-3 gap-1.5 text-xs font-bold text-center w-full min-w-0">
                           <button
                             onClick={() => {
                               setSelectedPmUser(profileTargetUser);
                               setActiveDrawer('pm');
                             }}
-                            className="p-2 rounded bg-slate-100 hover:bg-slate-200 border text-slate-800 flex items-center justify-center gap-1"
+                            className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 border text-slate-800 flex items-center justify-center gap-1 min-w-0 truncate"
                           >
-                            <span>💬 خاص</span>
+                            <span className="truncate">💬 خاص</span>
                           </button>
                           <button
                             onClick={() => showToast(`المعلومات: ${profileTargetUser.username} • الدولة: ${profileTargetUser.flag}`, 'info')}
-                            className="p-2 rounded bg-slate-100 hover:bg-slate-200 border text-slate-800 flex items-center justify-center gap-1"
+                            className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 border text-slate-800 flex items-center justify-center gap-1 min-w-0 truncate"
                           >
-                            <span>🔍 النكات</span>
+                            <span className="truncate">🔍 النكات</span>
                           </button>
                           {currentUser.username !== profileTargetUser.username && (
                             <button
                               type="button"
                               onClick={() => toggleIgnoreUser(profileTargetUser.username)}
-                              className={`p-2 rounded border flex items-center justify-center gap-1 font-bold transition-all cursor-pointer ${
+                              className={`p-2 rounded-lg border flex items-center justify-center gap-1 font-bold transition-all cursor-pointer min-w-0 truncate ${
                                 isUserIgnored(profileTargetUser.username)
                                   ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
                                   : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300'
                               }`}
                               title={isUserIgnored(profileTargetUser.username) ? 'إلغاء تجاهل العضو' : 'تجاهل العضو ومنع رسائله'}
                             >
-                              <UserX className="w-3.5 h-3.5" />
-                              <span>{isUserIgnored(profileTargetUser.username) ? 'إلغاء التجاهل' : '🚫 تجاهل'}</span>
+                              <UserX className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">{isUserIgnored(profileTargetUser.username) ? 'إلغاء التجاهل' : '🚫 تجاهل'}</span>
                             </button>
                           )}
                         </div>
@@ -11238,16 +11238,16 @@ export default function App() {
                         </div>
 
                         {/* Super Action Grid */}
-                        <div className="grid grid-cols-3 gap-1.5 text-[11px] font-bold text-center">
+                        <div className="grid grid-cols-3 gap-1.5 text-[10.5px] sm:text-xs font-bold text-center w-full min-w-0">
                           {/* PM */}
                           <button
                             onClick={() => {
                               setSelectedPmUser(profileTargetUser);
                               setActiveDrawer('pm');
                             }}
-                            className="p-2 rounded bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800"
+                            className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800 min-w-0 truncate"
                           >
-                            <span>💬 خاص</span>
+                            <span className="truncate">💬 خاص</span>
                           </button>
 
                           {/* Mention User */}
@@ -11258,10 +11258,10 @@ export default function App() {
                               setActiveDrawer('none');
                               showToast(`تمت إضافة منشن @${profileTargetUser.username} لحقل الكتابة 🔔`, 'info');
                             }}
-                            className="p-2 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center gap-1 font-bold cursor-pointer"
+                            className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center gap-1 font-bold cursor-pointer min-w-0 truncate"
                           >
-                            <AtSign className="w-3.5 h-3.5 text-amber-600" />
-                            <span>@ منشن</span>
+                            <AtSign className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span className="truncate">@ منشن</span>
                           </button>
 
                           {/* Official Warning */}
@@ -11270,10 +11270,10 @@ export default function App() {
                               setWarningModalTarget(profileTargetUser);
                               setCustomWarningText('');
                             }}
-                            className="p-2 rounded bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 flex items-center justify-center gap-1 font-bold cursor-pointer"
+                            className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 flex items-center justify-center gap-1 font-bold cursor-pointer min-w-0 truncate"
                           >
-                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                            <span>✉ تنبيه</span>
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span className="truncate">✉ تنبيه</span>
                           </button>
 
                           {/* Delete Avatar */}
@@ -11282,23 +11282,23 @@ export default function App() {
                               handleAdminAction('deleteAvatar', profileTargetUser.username);
                               setProfileTargetUser((prev) => prev ? { ...prev, avatarUrl: undefined } : null);
                             }}
-                            className="p-2 rounded bg-slate-100 hover:bg-rose-50 border text-rose-600 flex items-center justify-center gap-1 font-bold cursor-pointer"
+                            className="p-2 rounded-lg bg-slate-100 hover:bg-rose-50 border text-rose-600 flex items-center justify-center gap-1 font-bold cursor-pointer min-w-0 truncate"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>🚫 حذف الصورة</span>
+                            <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">🚫 حذف الصورة</span>
                           </button>
 
                           {/* Mute */}
                           <button
                             onClick={() => handleAdminAction('mute', profileTargetUser.username)}
-                            className={`p-2 rounded border flex items-center justify-center gap-1 ${
+                            className={`p-2 rounded-lg border flex items-center justify-center gap-1 min-w-0 truncate ${
                               profileTargetUser.isTextMuted
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                                 : 'bg-slate-100 hover:bg-slate-200 text-rose-600'
                             }`}
                           >
-                            <VolumeX className="w-3.5 h-3.5" />
-                            <span>{profileTargetUser.isTextMuted ? 'إلغاء الإسكات' : '🚫 إسكات'}</span>
+                            <VolumeX className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">{profileTargetUser.isTextMuted ? 'إلغاء الإسكات' : '🚫 إسكات'}</span>
                           </button>
 
                           {/* Kick */}
@@ -11307,10 +11307,10 @@ export default function App() {
                               const r = prompt('سبب الطرد من الشات:');
                               if (r !== null) handleAdminAction('kick', profileTargetUser.username, undefined, r || 'مخالفة القوانين');
                             }}
-                            className="p-2 rounded bg-rose-100 hover:bg-rose-200 border border-rose-300 text-rose-700 flex items-center justify-center gap-1"
+                            className="p-2 rounded-lg bg-rose-100 hover:bg-rose-200 border border-rose-300 text-rose-700 flex items-center justify-center gap-1 min-w-0 truncate"
                           >
-                            <UserX className="w-3.5 h-3.5" />
-                            <span>🚫 طرد</span>
+                            <UserX className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">🚫 طرد</span>
                           </button>
 
                           {/* Temp Kick */}
@@ -11319,9 +11319,9 @@ export default function App() {
                               const mins = prompt('مدة الطرد المؤقت بالدقائق (مثال: 15):');
                               if (mins) handleAdminAction('kick', profileTargetUser.username, undefined, `طرد مؤقت ${mins} دقيقة`);
                             }}
-                            className="p-2 rounded bg-slate-100 hover:bg-slate-200 border text-slate-800 flex items-center justify-center gap-1"
+                            className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 border text-slate-800 flex items-center justify-center gap-1 min-w-0 truncate"
                           >
-                            <span>⏰ طرد مؤقت</span>
+                            <span className="truncate">⏰ طرد مؤقت</span>
                           </button>
 
                           {/* Banner Button for Super */}
@@ -11332,11 +11332,11 @@ export default function App() {
                               setCustomBannerUrlInput(profileTargetUser.nameBannerUrl || '');
                               setShowBannerPickerModal(true);
                             }}
-                            className="p-2 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold flex items-center justify-center gap-1 cursor-pointer"
+                            className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold flex items-center justify-center gap-1 cursor-pointer min-w-0 truncate"
                             title="تعيين وتثبيت البنر المصور للعضو (500x50)"
                           >
-                            <Palette className="w-3.5 h-3.5 text-amber-600" />
-                            <span>★ البنر</span>
+                            <Palette className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span className="truncate">★ البنر</span>
                           </button>
 
                           {/* Ignore User Button */}
@@ -11344,15 +11344,15 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() => toggleIgnoreUser(profileTargetUser.username)}
-                              className={`p-2 rounded border flex items-center justify-center gap-1 font-bold transition-all cursor-pointer ${
+                              className={`p-2 rounded-lg border flex items-center justify-center gap-1 font-bold transition-all cursor-pointer min-w-0 truncate ${
                                 isUserIgnored(profileTargetUser.username)
                                   ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
                                   : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300'
                               }`}
                               title={isUserIgnored(profileTargetUser.username) ? 'إلغاء تجاهل العضو' : 'تجاهل العضو ومنع رسائله'}
                             >
-                              <UserX className="w-3.5 h-3.5" />
-                              <span>{isUserIgnored(profileTargetUser.username) ? 'إلغاء التجاهل' : '🚫 تجاهل'}</span>
+                              <UserX className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">{isUserIgnored(profileTargetUser.username) ? 'إلغاء التجاهل' : '🚫 تجاهل'}</span>
                             </button>
                           )}
 
@@ -11360,70 +11360,70 @@ export default function App() {
                           {profileTargetUser.micSlot !== null && (
                             <button
                               onClick={() => handleAdminAction('pullMic', profileTargetUser.username)}
-                              className="col-span-3 p-2.5 rounded bg-amber-500 hover:bg-amber-600 text-white font-black flex items-center justify-center gap-1 shadow-xs"
+                              className="col-span-3 p-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-black flex items-center justify-center gap-1 shadow-xs"
                             >
-                              <MicOff className="w-4 h-4" />
-                              <span>🎙️ سحب المايك من {profileTargetUser.username} فوراً</span>
+                              <MicOff className="w-4 h-4 shrink-0" />
+                              <span className="truncate">🎙️ سحب المايك من {profileTargetUser.username} فوراً</span>
                             </button>
                           )}
 
                           {/* Locked Permanent Ban (Admin Only) */}
                           <button
                             onClick={() => showToast('صلاحية الباند والحظر الدائم محصورة بمدير النظام (Admin) فقط.', 'info')}
-                            className="col-span-3 p-1.5 rounded bg-slate-50 border border-dashed border-slate-300 text-slate-400 flex items-center justify-center gap-1 text-[10px]"
+                            className="col-span-3 p-1.5 rounded-lg bg-slate-50 border border-dashed border-slate-300 text-slate-400 flex items-center justify-center gap-1 text-[10px]"
                           >
-                            <Lock className="w-3 h-3" />
+                            <Lock className="w-3 h-3 shrink-0" />
                             <span>الباند الدائم (محصور بمدير النظام Admin)</span>
                           </button>
                         </div>
 
                         {/* Super Editing Section (Quote, Username, Move Room) */}
-                        <div className="pt-2 border-t space-y-2 text-xs">
+                        <div className="pt-2 border-t space-y-2 text-xs w-full min-w-0">
                           <div className="font-bold text-slate-800 text-xs">تعديل بيانات العضو (سوبر):</div>
 
                           {/* تعديل الزخرفة */}
-                          <div className="flex gap-1.5 items-center">
-                            <span className="w-14 font-black text-slate-800 text-xs">الزخرفة:</span>
+                          <div className="flex flex-wrap sm:flex-nowrap gap-1.5 items-center w-full min-w-0">
+                            <span className="w-14 shrink-0 font-black text-slate-800 text-xs">الزخرفة:</span>
                             <input
                               type="text"
                               value={profileEditName}
                               onChange={(e) => setProfileEditName(e.target.value)}
-                              className="flex-1 p-2 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-950 bg-white placeholder-slate-400 outline-none focus:border-amber-500"
+                              className="flex-1 min-w-0 p-2 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-950 bg-white placeholder-slate-400 outline-none focus:border-amber-500"
                               placeholder="اسم / زخرفة العضو"
                             />
                             <button
                               onClick={() => handleAdminAction('updateUsername', profileTargetUser.username, profileEditName)}
-                              className="px-3 py-2 bg-[#2a241e] text-amber-200 font-bold rounded-lg cursor-pointer"
+                              className="shrink-0 px-3 py-2 bg-[#2a241e] text-amber-200 font-bold rounded-lg cursor-pointer"
                             >
                               تغيير
                             </button>
                           </div>
 
                           {/* تعديل الحالة */}
-                          <div className="flex gap-1.5 items-center">
-                            <span className="w-14 font-black text-slate-800 text-xs">الحالة:</span>
+                          <div className="flex flex-wrap sm:flex-nowrap gap-1.5 items-center w-full min-w-0">
+                            <span className="w-14 shrink-0 font-black text-slate-800 text-xs">الحالة:</span>
                             <input
                               type="text"
                               value={profileEditQuote}
                               onChange={(e) => setProfileEditQuote(e.target.value)}
-                              className="flex-1 p-2 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-950 bg-white placeholder-slate-400 outline-none focus:border-amber-500"
+                              className="flex-1 min-w-0 p-2 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-950 bg-white placeholder-slate-400 outline-none focus:border-amber-500"
                               placeholder="حالة العضو"
                             />
                             <button
                               onClick={() => handleAdminAction('updateQuote', profileTargetUser.username, profileEditQuote)}
-                              className="px-3 py-2 bg-[#48a942] text-white font-bold rounded-lg cursor-pointer"
+                              className="shrink-0 px-3 py-2 bg-[#48a942] text-white font-bold rounded-lg cursor-pointer"
                             >
                               ✔ حفظ
                             </button>
                           </div>
 
                           {/* نقل العضو لغرفة أخرى */}
-                          <div className="flex gap-1.5 items-center">
-                            <span className="w-14 font-black text-slate-800 text-xs">نقل لغرفة:</span>
+                          <div className="flex flex-wrap sm:flex-nowrap gap-1.5 items-center w-full min-w-0">
+                            <span className="w-14 shrink-0 font-black text-slate-800 text-xs">نقل لغرفة:</span>
                             <select
                               value={profileMoveRoom}
                               onChange={(e) => setProfileMoveRoom(e.target.value)}
-                              className="flex-1 p-2 border-2 border-amber-500/80 rounded-lg bg-white text-slate-950 font-black text-xs outline-none focus:border-amber-600"
+                              className="flex-1 min-w-0 p-2 border-2 border-amber-500/80 rounded-lg bg-white text-slate-950 font-black text-xs outline-none focus:border-amber-600 truncate"
                             >
                               {roomsList.map((r) => (
                                 <option key={r.id} value={r.id} className="bg-white text-slate-950 font-bold py-1">
@@ -11433,7 +11433,7 @@ export default function App() {
                             </select>
                             <button
                               onClick={() => handleAdminAction('moveRoom', profileTargetUser.username, profileMoveRoom)}
-                              className="px-3 py-2 bg-[#2a241e] text-amber-200 font-bold rounded-lg cursor-pointer"
+                              className="shrink-0 px-3 py-2 bg-[#2a241e] text-amber-200 font-bold rounded-lg cursor-pointer"
                             >
                               ✔ نقل
                             </button>
@@ -11442,11 +11442,11 @@ export default function App() {
                           {/* Admin Only Notices */}
                           <div className="p-2 bg-slate-50 border rounded text-[10px] text-slate-500 space-y-1">
                             <div className="flex items-center gap-1">
-                              <Lock className="w-3 h-3 text-slate-400" />
+                              <Lock className="w-3 h-3 text-slate-400 shrink-0" />
                               <span>تعديل رصيد اللايكات محصور بمدير النظام (Admin).</span>
                             </div>
                             <div className="flex items-center gap-1">
-                              <Lock className="w-3 h-3 text-slate-400" />
+                              <Lock className="w-3 h-3 text-slate-400 shrink-0" />
                               <span>ترقية وتعيين الرتب محصورة بمدير النظام (Admin).</span>
                             </div>
                           </div>
@@ -11458,7 +11458,7 @@ export default function App() {
 
                 {/* CASE 3: VIEWER IS ADMIN (FULL CONTROL) */}
                 {currentUser.role === 'admin' && (
-                  <div className="space-y-3">
+                  <div className="space-y-3 w-full min-w-0">
                     <div className="font-bold text-xs text-slate-800 flex items-center justify-between">
                       <span>لوحة تحكم مدير النظام (كامل الصلاحيات):</span>
                       <span className="text-[10px] text-red-600 font-bold bg-red-50 border border-red-200 px-2 py-0.5 rounded">
@@ -11467,16 +11467,16 @@ export default function App() {
                     </div>
 
                     {/* Admin Action Grid (Screenshot 10 & 11) */}
-                    <div className="grid grid-cols-3 gap-1.5 text-[11px] font-bold text-center">
+                    <div className="grid grid-cols-3 gap-1.5 text-[10.5px] sm:text-xs font-bold text-center w-full min-w-0">
                       {/* Row 1 */}
                       <button
                         onClick={() => {
                           setSelectedPmUser(profileTargetUser);
                           setActiveDrawer('pm');
                         }}
-                        className="p-2 rounded bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800"
+                        className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-slate-800 min-w-0 truncate"
                       >
-                        <span>💬 محادثه خاصه</span>
+                        <span className="truncate">💬 خاص</span>
                       </button>
 
                       <button
@@ -11486,10 +11486,10 @@ export default function App() {
                           setActiveDrawer('none');
                           showToast(`تمت إضافة منشن @${profileTargetUser.username} لحقل الكتابة 🔔`, 'info');
                         }}
-                        className="p-2 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center gap-1 font-bold cursor-pointer"
+                        className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center gap-1 font-bold cursor-pointer min-w-0 truncate"
                       >
-                        <AtSign className="w-3 h-3 text-amber-600" />
-                        <span>@ منشن</span>
+                        <AtSign className="w-3 h-3 text-amber-600 shrink-0" />
+                        <span className="truncate">@ منشن</span>
                       </button>
 
                       <button
@@ -11497,10 +11497,10 @@ export default function App() {
                           setWarningModalTarget(profileTargetUser);
                           setCustomWarningText('');
                         }}
-                        className="p-2 rounded bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 flex items-center justify-center gap-1 font-bold cursor-pointer"
+                        className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 flex items-center justify-center gap-1 font-bold cursor-pointer min-w-0 truncate"
                       >
-                        <AlertTriangle className="w-3 h-3 text-amber-600" />
-                        <span>✉ تنبيه</span>
+                        <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                        <span className="truncate">✉ تنبيه</span>
                       </button>
 
                       <button
@@ -11512,11 +11512,11 @@ export default function App() {
                             showToast(`تم تحديث رصيد لايكات ${profileTargetUser.username} إلى ${inputVal} ❤️`, 'success');
                           }
                         }}
-                        className="p-2 rounded bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center justify-center gap-1 text-rose-600 font-black cursor-pointer"
+                        className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center justify-center gap-1 text-rose-600 font-black cursor-pointer min-w-0 truncate"
                         title="تعديل رصيد لايكات العضو"
                       >
-                        <Heart className="w-3 h-3 fill-rose-600" />
-                        <span>+{profileTargetUser.likes}</span>
+                        <Heart className="w-3 h-3 fill-rose-600 shrink-0" />
+                        <span className="truncate">+{profileTargetUser.likes}</span>
                       </button>
 
                       {/* Row 2 */}
@@ -11525,20 +11525,20 @@ export default function App() {
                           handleAdminAction('deleteAvatar', profileTargetUser.username);
                           setProfileTargetUser((prev) => prev ? { ...prev, avatarUrl: undefined } : null);
                         }}
-                        className="p-2 rounded bg-slate-100 hover:bg-rose-50 border text-rose-600 flex items-center justify-center gap-1 font-bold cursor-pointer"
+                        className="p-2 rounded-lg bg-slate-100 hover:bg-rose-50 border text-rose-600 flex items-center justify-center gap-1 font-bold cursor-pointer min-w-0 truncate"
                       >
-                        <Trash2 className="w-3 h-3" />
-                        <span>🚫 حذف الصورة</span>
+                        <Trash2 className="w-3 h-3 shrink-0" />
+                        <span className="truncate">🚫 حذف الصورة</span>
                       </button>
 
                       <button
                         onClick={() => {
                           socket?.emit('revealNicks', { targetUsername: profileTargetUser.username });
                         }}
-                        className="p-2 rounded bg-amber-100 hover:bg-amber-200 border border-amber-400 font-bold flex items-center justify-center gap-1 text-amber-950 cursor-pointer"
+                        className="p-2 rounded-lg bg-amber-100 hover:bg-amber-200 border border-amber-400 font-bold flex items-center justify-center gap-1 text-amber-950 cursor-pointer min-w-0 truncate"
                         title="كشف النكات وعنوان الآي بي والجهاز"
                       >
-                        <span>🔍 كشف النكات</span>
+                        <span className="truncate">🔍 كشف النكات</span>
                       </button>
 
                       <button
@@ -11547,10 +11547,10 @@ export default function App() {
                           showToast(`تم إرسال هدية فاخرة لـ ${profileTargetUser.username} 💎`, 'success');
                           confetti({ particleCount: 70, spread: 90 });
                         }}
-                        className="p-2 rounded bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-indigo-700 cursor-pointer"
+                        className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 border flex items-center justify-center gap-1 text-indigo-700 cursor-pointer min-w-0 truncate"
                         title="إرسال هدية ملكية للعضو"
                       >
-                        <span>💎 ارسل هديه</span>
+                        <span className="truncate">💎 ارسل هديه</span>
                       </button>
 
                       {/* تغيير كلمة المرور عند النسيان */}
@@ -11565,11 +11565,11 @@ export default function App() {
                             showToast('يجب أن تتكون كلمة المرور من 3 خانات على الأقل', 'error');
                           }
                         }}
-                        className="p-2 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 font-bold flex items-center justify-center gap-1 text-amber-900 cursor-pointer"
+                        className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 font-bold flex items-center justify-center gap-1 text-amber-900 cursor-pointer min-w-0 truncate"
                         title="تغيير كلمة المرور للعضو عند نسيانها"
                       >
-                        <Key className="w-3 h-3 text-amber-600" />
-                        <span>🔑 كلمة المرور</span>
+                        <Key className="w-3 h-3 text-amber-600 shrink-0" />
+                        <span className="truncate">🔑 كلمة المرور</span>
                       </button>
 
                       {/* Row 3 */}
@@ -11578,17 +11578,17 @@ export default function App() {
                           const r = prompt('سبب الطرد:');
                           handleAdminAction('kick', profileTargetUser.username, undefined, r || undefined);
                         }}
-                        className="p-2 rounded bg-rose-100 hover:bg-rose-200 border border-rose-300 text-rose-700 flex items-center justify-center gap-1 cursor-pointer"
+                        className="p-2 rounded-lg bg-rose-100 hover:bg-rose-200 border border-rose-300 text-rose-700 flex items-center justify-center gap-1 cursor-pointer min-w-0 truncate"
                       >
-                        <UserX className="w-3 h-3" />
-                        <span>🚫 طرد</span>
+                        <UserX className="w-3 h-3 shrink-0" />
+                        <span className="truncate">🚫 طرد</span>
                       </button>
 
                       <button
                         onClick={() => handleAdminAction('kick', profileTargetUser.username, undefined, 'طرد من الغرفة')}
-                        className="p-2 rounded bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center gap-1 cursor-pointer"
+                        className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center gap-1 cursor-pointer min-w-0 truncate"
                       >
-                        <span>👤 طرد من الغرفه</span>
+                        <span className="truncate">👤 طرد من الغرفه</span>
                       </button>
 
                       <button
@@ -11598,11 +11598,11 @@ export default function App() {
                           setCustomBannerUrlInput(profileTargetUser.nameBannerUrl || '');
                           setShowBannerPickerModal(true);
                         }}
-                        className="p-2 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold flex items-center justify-center gap-1 cursor-pointer"
+                        className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold flex items-center justify-center gap-1 cursor-pointer min-w-0 truncate"
                         title="تعيين وتثبيت البنر المصور للعضو (500x50)"
                       >
-                        <Palette className="w-3.5 h-3.5 text-amber-600" />
-                        <span>★ البنر</span>
+                        <Palette className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span className="truncate">★ البنر</span>
                       </button>
 
                       {/* Ignore / Unignore User */}
@@ -11610,15 +11610,15 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => toggleIgnoreUser(profileTargetUser.username)}
-                          className={`p-2 rounded border flex items-center justify-center gap-1 font-bold transition-all cursor-pointer ${
+                          className={`p-2 rounded-lg border flex items-center justify-center gap-1 font-bold transition-all cursor-pointer min-w-0 truncate ${
                             isUserIgnored(profileTargetUser.username)
                               ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
                               : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300'
                           }`}
                           title={isUserIgnored(profileTargetUser.username) ? 'إلغاء تجاهل العضو' : 'تجاهل العضو ومنع رسائله'}
                         >
-                          <UserX className="w-3 h-3" />
-                          <span>{isUserIgnored(profileTargetUser.username) ? 'إلغاء التجاهل' : '🚫 تجاهل'}</span>
+                          <UserX className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{isUserIgnored(profileTargetUser.username) ? 'إلغاء التجاهل' : '🚫 تجاهل'}</span>
                         </button>
                       )}
 
@@ -11626,24 +11626,24 @@ export default function App() {
                       {profileTargetUser.micSlot !== null && (
                         <button
                           onClick={() => handleAdminAction('pullMic', profileTargetUser.username)}
-                          className="col-span-3 p-2.5 rounded bg-amber-500 hover:bg-amber-600 text-white font-black flex items-center justify-center gap-1 shadow-xs"
+                          className="col-span-3 p-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-black flex items-center justify-center gap-1 shadow-xs"
                         >
-                          <MicOff className="w-4 h-4" />
-                          <span>🎙️ سحب المايك من {profileTargetUser.username} فوراً</span>
+                          <MicOff className="w-4 h-4 shrink-0" />
+                          <span className="truncate">🎙️ سحب المايك من {profileTargetUser.username} فوراً</span>
                         </button>
                       )}
 
                       {/* Mute */}
                       <button
                         onClick={() => handleAdminAction('mute', profileTargetUser.username)}
-                        className={`p-2 rounded border flex items-center justify-center gap-1 ${
+                        className={`p-2 rounded-lg border flex items-center justify-center gap-1 min-w-0 truncate ${
                           profileTargetUser.isTextMuted
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                             : 'bg-slate-100 hover:bg-slate-200 text-rose-600'
                         }`}
                       >
-                        <VolumeX className="w-3.5 h-3.5" />
-                        <span>{profileTargetUser.isTextMuted ? 'إلغاء الإسكات' : '🚫 اسكات'}</span>
+                        <VolumeX className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{profileTargetUser.isTextMuted ? 'إلغاء الإسكات' : '🚫 اسكات'}</span>
                       </button>
 
                       {/* Temp Ban */}
@@ -11652,9 +11652,9 @@ export default function App() {
                           const mins = prompt('مدة الباند المؤقت بالدقائق (مثال: 30):');
                           if (mins) handleAdminAction('kick', profileTargetUser.username, undefined, `باند مؤقت ${mins} دقيقة`);
                         }}
-                        className="p-2 rounded bg-slate-100 border text-slate-800 flex items-center justify-center gap-1"
+                        className="p-2 rounded-lg bg-slate-100 border text-slate-800 flex items-center justify-center gap-1 min-w-0 truncate"
                       >
-                        <span>⏰ باند مؤقت</span>
+                        <span className="truncate">⏰ باند مؤقت</span>
                       </button>
 
                       {/* Permanent Ban */}
@@ -11664,108 +11664,110 @@ export default function App() {
                             handleAdminAction('ban', profileTargetUser.username);
                           }
                         }}
-                        className="p-2 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center justify-center gap-1"
+                        className="p-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold flex items-center justify-center gap-1 min-w-0 truncate"
                       >
-                        <span>🚫 باند</span>
+                        <span className="truncate">🚫 باند</span>
                       </button>
                     </div>
 
                     {/* Admin Complete Editing Suite */}
-                    <div className="mt-4 pt-3 border-t space-y-2 text-xs">
+                    <div className="mt-4 pt-3 border-t space-y-2.5 text-xs w-full min-w-0">
                       <div className="font-black text-slate-800 text-sm mb-1">صلاحيات وتعديل العضو الكاملة:</div>
 
                       {/* تعديل الزخرفة */}
-                      <div className="flex gap-1.5 items-center">
-                        <span className="w-14 font-black text-slate-800 text-xs">الزخرفة:</span>
+                      <div className="flex flex-wrap sm:flex-nowrap gap-1.5 items-center w-full min-w-0">
+                        <span className="w-14 shrink-0 font-black text-slate-800 text-xs">الزخرفة:</span>
                         <input
                           type="text"
                           value={profileEditName}
                           onChange={(e) => setProfileEditName(e.target.value)}
-                          className="flex-1 p-2 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-950 bg-white placeholder-slate-400 outline-none focus:border-amber-500"
+                          className="flex-1 min-w-0 p-2 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-950 bg-white placeholder-slate-400 outline-none focus:border-amber-500"
                           placeholder="اسم / زخرفة العضو"
                         />
                         <button
                           onClick={() => handleAdminAction('updateUsername', profileTargetUser.username, profileEditName)}
-                          className="px-3 py-2 bg-[#2a241e] text-amber-200 font-bold rounded-lg cursor-pointer"
+                          className="shrink-0 px-3 py-2 bg-[#2a241e] text-amber-200 font-bold rounded-lg cursor-pointer"
                         >
                           تغيير
                         </button>
                       </div>
 
                       {/* تعديل الصورة الشخصية */}
-                      <div className="flex gap-1.5 items-center">
-                        <span className="w-14 font-black text-slate-800 text-xs">الصورة📷:</span>
+                      <div className="flex flex-wrap sm:flex-nowrap gap-1.5 items-center w-full min-w-0">
+                        <span className="w-14 shrink-0 font-black text-slate-800 text-xs">الصورة📷:</span>
                         <input
                           type="text"
                           value={profileTargetUser.avatarUrl || ''}
                           onChange={(e) => setProfileTargetUser({ ...profileTargetUser, avatarUrl: e.target.value })}
-                          className="flex-1 p-2 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-950 bg-white truncate outline-none focus:border-amber-500"
+                          className="flex-1 min-w-0 p-2 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-950 bg-white truncate outline-none focus:border-amber-500"
                           placeholder="رابط الصورة أو اختر ملف"
                         />
-                        <label className="px-2.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-lg cursor-pointer text-xs">
-                          رفع
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) =>
-                              handleFileUpload(e, (dataUrl) => {
-                                handleAdminAction('updateAvatar', profileTargetUser.username, dataUrl);
-                                setProfileTargetUser({ ...profileTargetUser, avatarUrl: dataUrl });
-                              })
-                            }
-                          />
-                        </label>
-                        <button
-                          onClick={() => handleAdminAction('updateAvatar', profileTargetUser.username, profileTargetUser.avatarUrl)}
-                          className="px-3 py-2 bg-[#48a942] text-white font-bold rounded-lg cursor-pointer"
-                        >
-                          ✔ حفظ
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <label className="px-2.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-lg cursor-pointer text-xs">
+                            رفع
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) =>
+                                handleFileUpload(e, (dataUrl) => {
+                                  handleAdminAction('updateAvatar', profileTargetUser.username, dataUrl);
+                                  setProfileTargetUser({ ...profileTargetUser, avatarUrl: dataUrl });
+                                })
+                              }
+                            />
+                          </label>
+                          <button
+                            onClick={() => handleAdminAction('updateAvatar', profileTargetUser.username, profileTargetUser.avatarUrl)}
+                            className="px-3 py-2 bg-[#48a942] text-white font-bold rounded-lg cursor-pointer"
+                          >
+                            ✔ حفظ
+                          </button>
+                        </div>
                       </div>
 
                       {/* تعديل اللايكات */}
-                      <div className="flex gap-1.5 items-center">
-                        <span className="w-14 font-black text-rose-600 text-xs">اللايكات❤️:</span>
+                      <div className="flex flex-wrap sm:flex-nowrap gap-1.5 items-center w-full min-w-0">
+                        <span className="w-14 shrink-0 font-black text-rose-600 text-xs">اللايكات❤️:</span>
                         <input
                           type="number"
                           value={profileEditLikes}
                           onChange={(e) => setProfileEditLikes(e.target.value)}
-                          className="flex-1 p-2 border-2 border-slate-300 rounded-lg text-xs font-black text-slate-950 bg-white font-mono outline-none focus:border-amber-500"
+                          className="flex-1 min-w-0 p-2 border-2 border-slate-300 rounded-lg text-xs font-black text-slate-950 bg-white font-mono outline-none focus:border-amber-500"
                         />
                         <button
                           onClick={() => handleAdminAction('updateLikes', profileTargetUser.username, profileEditLikes)}
-                          className="px-3 py-2 bg-[#48a942] text-white font-bold rounded-lg cursor-pointer"
+                          className="shrink-0 px-3 py-2 bg-[#48a942] text-white font-bold rounded-lg cursor-pointer"
                         >
                           ✔ حفظ
                         </button>
                       </div>
 
                       {/* تعديل الحاله */}
-                      <div className="flex gap-1.5 items-center">
-                        <span className="w-14 font-black text-slate-800 text-xs">الحاله:</span>
+                      <div className="flex flex-wrap sm:flex-nowrap gap-1.5 items-center w-full min-w-0">
+                        <span className="w-14 shrink-0 font-black text-slate-800 text-xs">الحاله:</span>
                         <input
                           type="text"
                           value={profileEditQuote}
                           onChange={(e) => setProfileEditQuote(e.target.value)}
-                          className="flex-1 p-2 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-950 bg-white placeholder-slate-400 outline-none focus:border-amber-500"
+                          className="flex-1 min-w-0 p-2 border-2 border-slate-300 rounded-lg text-xs font-bold text-slate-950 bg-white placeholder-slate-400 outline-none focus:border-amber-500"
                           placeholder="اكتب حالة العضو..."
                         />
                         <button
                           onClick={() => handleAdminAction('updateQuote', profileTargetUser.username, profileEditQuote)}
-                          className="px-3 py-2 bg-[#48a942] text-white font-bold rounded-lg cursor-pointer"
+                          className="shrink-0 px-3 py-2 bg-[#48a942] text-white font-bold rounded-lg cursor-pointer"
                         >
                           ✔ حفظ
                         </button>
                       </div>
 
                       {/* ترقية الرتبة والمجموعة (Admin Exclusive) */}
-                      <div className="p-3 bg-white border-2 border-indigo-200 rounded-xl space-y-2 shadow-xs">
+                      <div className="p-3 bg-white border-2 border-indigo-200 rounded-xl space-y-2 shadow-xs w-full min-w-0">
                         <div className="font-black text-slate-900 text-xs">المجموعه والصلاحيات (ترقية فورية):</div>
                         <select
                           value={profileEditRole}
                           onChange={(e: any) => setProfileEditRole(e.target.value)}
-                          className="w-full p-2.5 border-2 border-indigo-500 rounded-lg bg-white text-slate-950 font-black text-xs outline-none focus:border-indigo-600 shadow-xs cursor-pointer"
+                          className="w-full min-w-0 p-2.5 border-2 border-indigo-500 rounded-lg bg-white text-slate-950 font-black text-xs outline-none focus:border-indigo-600 shadow-xs cursor-pointer truncate"
                         >
                           <option value="guest" className="bg-white text-slate-950 font-bold py-1">👤 زائر عادي (بدون صلاحيات إدارية)</option>
                           <option value="member" className="bg-white text-slate-950 font-bold py-1">🎖️ [1000] عضو مسجل معتمد</option>
@@ -11781,12 +11783,12 @@ export default function App() {
                       </div>
 
                       {/* نقل العضو لغرفة أخرى */}
-                      <div className="p-3 bg-white border-2 border-amber-300 rounded-xl space-y-2 shadow-xs">
+                      <div className="p-3 bg-white border-2 border-amber-300 rounded-xl space-y-2 shadow-xs w-full min-w-0">
                         <div className="font-black text-slate-900 text-xs">نقل لغرفة أخرى:</div>
                         <select
                           value={profileMoveRoom}
                           onChange={(e) => setProfileMoveRoom(e.target.value)}
-                          className="w-full p-2.5 border-2 border-amber-500 rounded-lg bg-white text-slate-950 font-black text-xs outline-none focus:border-amber-600 shadow-xs cursor-pointer"
+                          className="w-full min-w-0 p-2.5 border-2 border-amber-500 rounded-lg bg-white text-slate-950 font-black text-xs outline-none focus:border-amber-600 shadow-xs cursor-pointer truncate"
                         >
                           {roomsList.map((r) => (
                             <option key={r.id} value={r.id} className="bg-white text-slate-950 font-bold py-1">
@@ -11803,25 +11805,25 @@ export default function App() {
                       </div>
 
                       {/* تغيير كلمة مرور العضو عند النسيان (Admin Only) */}
-                      <div className="p-2.5 bg-amber-50/90 border border-amber-300 rounded-xl space-y-1.5 shadow-xs">
+                      <div className="p-2.5 bg-amber-50/90 border border-amber-300 rounded-xl space-y-1.5 shadow-xs w-full min-w-0">
                         <div className="font-bold text-amber-950 flex items-center justify-between text-xs">
                           <span className="flex items-center gap-1.5">
-                            <Key className="w-3.5 h-3.5 text-amber-700" />
+                            <Key className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                             <span>تغيير كلمة المرور للعضو (عند النسيان):</span>
                           </span>
-                          <span className="text-[10px] text-amber-700 font-bold bg-amber-200/60 px-1.5 py-0.2 rounded">
+                          <span className="text-[10px] text-amber-700 font-bold bg-amber-200/60 px-1.5 py-0.2 rounded shrink-0">
                             مدير النظام فقط
                           </span>
                         </div>
                         <p className="text-[10px] text-amber-900/80 leading-tight">
                           يمكنك كمدير نظام تعيين كلمة مرور جديدة للعضو مباشرة في حال نسيانها لتمكينه من الدخول لحسابه مجدداً.
                         </p>
-                        <div className="flex gap-1.5 items-center">
+                        <div className="flex flex-wrap sm:flex-nowrap gap-1.5 items-center w-full min-w-0">
                           <input
                             type="text"
                             id={`admin_user_pass_${profileTargetUser.username}`}
                             placeholder="كلمة المرور الجديدة (مثال: 123456)..."
-                            className="flex-1 p-1.5 border border-amber-300 rounded text-xs bg-white text-slate-900 font-mono font-bold"
+                            className="flex-1 min-w-0 p-1.5 border border-amber-300 rounded text-xs bg-white text-slate-900 font-mono font-bold"
                           />
                           <button
                             type="button"
@@ -11836,7 +11838,7 @@ export default function App() {
                               showToast(`تم تغيير وتعيين كلمة المرور لـ [${profileTargetUser.username}] بنجاح 🔑`, 'success');
                               if (el) el.value = '';
                             }}
-                            className="px-3 py-1.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold rounded text-xs cursor-pointer shadow-xs flex items-center gap-1"
+                            className="shrink-0 px-3 py-1.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold rounded text-xs cursor-pointer shadow-xs flex items-center gap-1"
                           >
                             <Key className="w-3 h-3" />
                             <span>تعيين 🔑</span>
