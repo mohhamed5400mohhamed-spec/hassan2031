@@ -996,6 +996,9 @@ export let messageRetentionLimits: MessageRetentionLimits = {
 export function saveMessageRetentionLimits() {
   try {
     dataManager.save('message_retention_limits', messageRetentionLimits);
+    const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
+    const localFile = path.join(localDir, 'message_retention_limits.json');
+    fs.writeFileSync(localFile, JSON.stringify(messageRetentionLimits, null, 2), 'utf8');
   } catch (err) {
     console.error('Error saving message retention limits:', err);
   }
@@ -1244,6 +1247,9 @@ export function loadGlobalAppearance() {
 export function saveMonitoredWords() {
   try {
     dataManager.saveMonitoredWords(monitoredWords);
+    const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
+    const localFile = path.join(localDir, 'monitored_words.json');
+    fs.writeFileSync(localFile, JSON.stringify(monitoredWords, null, 2), 'utf8');
   } catch (err) {
     console.error('Error saving monitored words:', err);
   }
@@ -1253,7 +1259,9 @@ export function loadMonitoredWords() {
   try {
     const parsed = dataManager.loadMonitoredWordsSync<string[]>(monitoredWords);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      monitoredWords = parsed;
+      // Merge unique words while preserving custom admin additions
+      const set = new Set([...monitoredWords, ...parsed]);
+      monitoredWords = Array.from(set);
     }
   } catch (err) {
     console.error('Error loading monitored words:', err);
@@ -1453,17 +1461,34 @@ loadEmblems();
 // Monitoring events buffer & persistent audit log via Data Layer (تظل محفوظة بشكل دائم حتى المسح اليدوي من الإدارة)
 let monitorLogs: MonitorEvent[] = [];
 let auditSaveTimer: NodeJS.Timeout | null = null;
-
-function saveAuditLogs() {
+function saveAuditLogs(immediate = false) {
+  if (immediate) {
+    if (auditSaveTimer) {
+      clearTimeout(auditSaveTimer);
+      auditSaveTimer = null;
+    }
+    try {
+      dataManager.saveAuditLogs(monitorLogs.slice(0, 10000));
+      const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
+      const localFile = path.join(localDir, 'admin_audit_logs.json');
+      fs.writeFileSync(localFile, JSON.stringify(monitorLogs.slice(0, 10000), null, 2), 'utf8');
+    } catch (err) {
+      console.error('Error saving persistent audit logs immediately:', err);
+    }
+    return;
+  }
   if (auditSaveTimer) return;
   auditSaveTimer = setTimeout(() => {
     auditSaveTimer = null;
     try {
       dataManager.saveAuditLogs(monitorLogs.slice(0, 10000));
+      const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
+      const localFile = path.join(localDir, 'admin_audit_logs.json');
+      fs.writeFileSync(localFile, JSON.stringify(monitorLogs.slice(0, 10000), null, 2), 'utf8');
     } catch (err) {
       console.error('Error saving persistent audit logs:', err);
     }
-  }, 2000);
+  }, 1000);
 }
 
 function loadAuditLogs() {
@@ -1537,7 +1562,9 @@ export interface RegisteredMemberInfo {
   points: number;
   honorBadge?: string;
   ipAddress?: string;
+  ipHistory?: string[]; // All real IPs this member has logged in with (سجل جميع الايبيهات الحقيقية)
   deviceInfo?: string;
+  deviceHistory?: string[]; // All devices used by this member
   deviceFingerprint?: string;
   nameColor?: string;
   textColor?: string;
@@ -1598,6 +1625,11 @@ export function getAllRegisteredMembersPayload() {
   return Object.entries(registeredMembers).map(([username, m]) => {
     const onlineUser = presenceSnapshot.find((u) => u.username.toLowerCase() === username.toLowerCase());
     const presenceState: 'online' | 'away' | 'offline' = onlineUser ? (onlineUser.presenceState || 'online') : 'offline';
+    const allIps = Array.from(new Set([
+      ...(onlineUser?.ipAddress && onlineUser.ipAddress !== '192.168.1.100' ? [onlineUser.ipAddress] : []),
+      ...(m.ipAddress && m.ipAddress !== '192.168.1.100' ? [m.ipAddress] : []),
+      ...(Array.isArray(m.ipHistory) ? m.ipHistory.filter((ip) => ip && ip !== '192.168.1.100') : [])
+    ]));
     return {
       username,
       role: m.role,
@@ -1609,7 +1641,8 @@ export function getAllRegisteredMembersPayload() {
       honorBadge: m.honorBadge,
       nameBannerUrl: onlineUser?.nameBannerUrl || m.nameBannerUrl || '',
       giftBadges: onlineUser?.giftBadges || m.giftBadges || [],
-      ipAddress: onlineUser?.ipAddress || m.ipAddress || '192.168.1.1',
+      ipAddress: onlineUser?.ipAddress || m.ipAddress || allIps[0] || 'غير متوفر',
+      ipHistory: allIps,
       deviceInfo: onlineUser?.deviceInfo || m.deviceInfo || 'جهاز ذكي',
       deviceFingerprint: onlineUser?.deviceFingerprint || m.deviceFingerprint || 'FP-DEV-DEFAULT',
       isJailed: Boolean(m.isJailed || jailedUsernames.has(username.toLowerCase())),
@@ -1630,6 +1663,79 @@ const ipToAccountsMap: Map<string, Set<string>> = new Map();
 const ipToDeviceMap: Map<string, string> = new Map();
 const ipToCountryMap: Map<string, string> = new Map();
 const ipToFingerprintMap: Map<string, string> = new Map();
+
+// Helper to extract true client IP across Cloudflare, reverse proxies, and standard sockets
+export function getRealClientIp(socket: any): string {
+  if (!socket) return '127.0.0.1';
+  const headers = socket.handshake?.headers || {};
+  const cfConnecting = (headers['cf-connecting-ip'] as string)?.trim();
+  const xRealIp = (headers['x-real-ip'] as string)?.trim();
+  const xForwardedFor = (headers['x-forwarded-for'] as string)?.split(',')[0]?.trim();
+  let ip = cfConnecting || xForwardedFor || xRealIp || socket.handshake?.address || '127.0.0.1';
+  if (ip.startsWith('::ffff:')) {
+    ip = ip.substring(7);
+  }
+  return ip.trim() || '127.0.0.1';
+}
+
+// Record and persist member connection audit details (IP, IP history, device, fingerprint)
+export function recordMemberAuditConnection(username: string, clientIp: string, deviceInfo: string, flag: string, fingerprint?: string) {
+  if (!username) return;
+  const clean = username.trim();
+  const lower = clean.toLowerCase();
+
+  // Case-insensitive key lookup in registeredMembers
+  const foundKey = Object.keys(registeredMembers).find((k) => k.toLowerCase() === lower) || clean;
+  if (!registeredMembers[foundKey]) {
+    registeredMembers[foundKey] = {
+      password: hashPassword('123'),
+      role: 'guest',
+      flag: flag || '🇾🇪',
+      statusQuote: 'زائر',
+      likes: 100,
+      points: 500,
+      ipAddress: clientIp,
+      ipHistory: (clientIp && clientIp !== '192.168.1.100') ? [clientIp] : [],
+      deviceInfo,
+      deviceHistory: deviceInfo ? [deviceInfo] : [],
+      deviceFingerprint: fingerprint,
+      lastSeen: Date.now()
+    };
+  } else {
+    const m = registeredMembers[foundKey];
+    if (clientIp && clientIp !== '192.168.1.100') {
+      m.ipAddress = clientIp;
+      if (!Array.isArray(m.ipHistory)) m.ipHistory = [];
+      if (!m.ipHistory.includes(clientIp)) {
+        m.ipHistory.push(clientIp);
+        if (m.ipHistory.length > 30) m.ipHistory.shift();
+      }
+    }
+    if (deviceInfo) {
+      m.deviceInfo = deviceInfo;
+      if (!Array.isArray(m.deviceHistory)) m.deviceHistory = [];
+      if (!m.deviceHistory.includes(deviceInfo)) {
+        m.deviceHistory.push(deviceInfo);
+        if (m.deviceHistory.length > 10) m.deviceHistory.shift();
+      }
+    }
+    if (fingerprint) m.deviceFingerprint = fingerprint;
+    m.lastSeen = Date.now();
+  }
+
+  // Cross-reference index in memory
+  if (clientIp && clientIp !== '192.168.1.100') {
+    if (!ipToAccountsMap.has(clientIp)) {
+      ipToAccountsMap.set(clientIp, new Set<string>());
+    }
+    ipToAccountsMap.get(clientIp)!.add(foundKey);
+    if (deviceInfo) ipToDeviceMap.set(clientIp, deviceInfo);
+    if (flag) ipToCountryMap.set(clientIp, flag);
+    if (fingerprint) ipToFingerprintMap.set(clientIp, fingerprint);
+  }
+
+  saveMembers();
+}
 
 // Helper to parse human-readable device name from User-Agent
 export function parseDeviceInfo(ua?: string): string {
@@ -1930,6 +2036,29 @@ try {
     saveMembers();
     console.log('[Security] ✅ Automated migration: Upgraded stored passwords to secure bcrypt hashes.');
   }
+
+  // Re-hydrate in-memory IP, accounts and device mappings from persistent storage
+  for (const [username, m] of Object.entries(registeredMembers)) {
+    if (!m) continue;
+    const allMemberIps = new Set<string>();
+    if (m.ipAddress && m.ipAddress !== '127.0.0.1' && m.ipAddress !== '192.168.1.100') {
+      allMemberIps.add(m.ipAddress);
+    }
+    if (Array.isArray(m.ipHistory)) {
+      m.ipHistory.forEach((ip) => {
+        if (ip && ip !== '127.0.0.1' && ip !== '192.168.1.100') allMemberIps.add(ip);
+      });
+    }
+    allMemberIps.forEach((ip) => {
+      if (!ipToAccountsMap.has(ip)) {
+        ipToAccountsMap.set(ip, new Set<string>());
+      }
+      ipToAccountsMap.get(ip)!.add(username);
+      if (m.deviceInfo) ipToDeviceMap.set(ip, m.deviceInfo);
+      if (m.flag) ipToCountryMap.set(ip, m.flag);
+      if (m.deviceFingerprint) ipToFingerprintMap.set(ip, m.deviceFingerprint);
+    });
+  }
 } catch (err) {
   console.error('[Data Layer] Error loading members from data layer:', err);
 }
@@ -2019,7 +2148,18 @@ function loadWallPosts() {
   try {
     const data = dataManager.loadWallPostsSync<WallPost[]>([]);
     if (Array.isArray(data)) {
-      wallPosts = data;
+      wallPosts = data.map((p) => {
+        let ts = p.timestamp;
+        if (!ts && p.id?.startsWith('post-')) {
+          const parsed = Number(p.id.replace('post-', ''));
+          if (parsed && !isNaN(parsed)) ts = parsed;
+        }
+        return {
+          ...p,
+          timestamp: ts || Date.now(),
+          time: p.time && p.time !== 'الآن' ? p.time : getCurrentTimeString()
+        };
+      });
       return;
     }
   } catch (err) {
@@ -2068,6 +2208,8 @@ loadStories();
 export function hydrateAllCollectionsFromStorage(isRehydration = false) {
   try {
     loadMonitoredWords();
+    loadAuditLogs();
+    loadMessageRetentionLimits();
     loadServerSecurity();
     loadLikesSettings();
     loadStaffMemos();
@@ -2123,6 +2265,8 @@ export function hydrateAllCollectionsFromStorage(isRehydration = false) {
       });
       io.emit('globalAppearanceUpdated', globalAppearance);
       io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
+      io.emit('monitoredWordsUpdated', monitoredWords);
+      io.emit('messageRetentionLimitsUpdated', messageRetentionLimits);
     }
   } catch (err) {
     console.error('Error during hydrateAllCollectionsFromStorage:', err);
@@ -2230,9 +2374,8 @@ setInterval(() => {
 
 // Socket connection
 io.on('connection', (socket) => {
-  // Determine real client IP and country flag
-  const rawIp = (socket.handshake.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || socket.handshake.address || '127.0.0.1';
-  const clientIp = rawIp.replace(/^.*:/, '') || '127.0.0.1';
+  // Determine real client IP and country flag across Cloudflare / proxies / direct
+  const clientIp = getRealClientIp(socket);
   const cfCountry = (socket.handshake.headers['cf-ipcountry'] as string) || '';
   const detectedRealFlag = getFlagFromCountryCode(cfCountry);
 
@@ -3074,6 +3217,13 @@ io.on('connection', (socket) => {
         session.user.giftBadges = registeredMembers[uName].giftBadges;
       }
 
+      const clientIp = getRealClientIp(socket);
+      const clientUserAgent = (socket.handshake.headers['user-agent'] as string) || '';
+      const clientDevice = parseDeviceInfo(clientUserAgent);
+      session.user.ipAddress = clientIp;
+      session.user.deviceInfo = clientDevice;
+      recordMemberAuditConnection(session.user.username, clientIp, clientDevice, session.user.flag || '🇾🇪');
+
       // Purge any duplicate records of this user across the users array
       const lowerName = session.user.username.toLowerCase();
       let foundExisting = false;
@@ -3083,6 +3233,8 @@ io.on('connection', (socket) => {
             users[i].id = socket.id;
             users[i].room = targetRoom;
             users[i].presenceState = 'online';
+            users[i].ipAddress = clientIp;
+            users[i].deviceInfo = clientDevice;
             users[i].nameBannerUrl = session.user.nameBannerUrl;
             users[i].giftBadges = session.user.giftBadges;
             session.user = users[i];
@@ -3148,8 +3300,13 @@ io.on('connection', (socket) => {
           filterAlerts,
           monitoredWords,
           rolePermissions,
-          serverSecurity
+          serverSecurity,
+          monitorLogs: monitorLogs.slice(0, 1000),
+          messageRetentionLimits
         });
+        socket.emit('monitorLogs', monitorLogs.slice(0, 1000));
+        socket.emit('messageRetentionLimitsUpdated', messageRetentionLimits);
+        socket.emit('monitoredWordsUpdated', monitoredWords);
         socket.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
       }
     } else {
@@ -3219,7 +3376,7 @@ io.on('connection', (socket) => {
     socket.emit('loggedOutSuccess');
   });
 
-  // Reveal Nicks & Account Discovery (كشف النكات والآي بي والعضويات)
+  // Reveal Nicks & Account Discovery (كشف النكات والآي بي والعضويات للأعضاء المتصلين وغير المتصلين)
   socket.on('revealNicks', ({ targetUsername }: { targetUsername: string }) => {
     const admin = users.find((u) => u.id === socket.id);
     if (!admin || (admin.role !== 'admin' && admin.role !== 'super')) {
@@ -3228,54 +3385,164 @@ io.on('connection', (socket) => {
     }
 
     const cleanTargetName = (targetUsername || '').trim();
-    const targetUser = users.find((u) => u.username.toLowerCase() === cleanTargetName.toLowerCase());
-    let targetIp = targetUser?.ipAddress;
+    if (!cleanTargetName) return;
+    const lowerTarget = cleanTargetName.toLowerCase();
 
-    if (!targetIp) {
-      for (const [ip, nicks] of ipToAccountsMap.entries()) {
-        if (Array.from(nicks).some((n) => n.toLowerCase() === cleanTargetName.toLowerCase())) {
-          targetIp = ip;
-          break;
-        }
+    // 1. Check if user is currently online in memory
+    const targetUser = users.find((u) => u.username.toLowerCase() === lowerTarget);
+
+    // 2. Look up member in registeredMembers (case-insensitive)
+    const regKey = Object.keys(registeredMembers).find((k) => k.toLowerCase() === lowerTarget);
+    const regMember = regKey ? registeredMembers[regKey] : undefined;
+    const finalDisplayName = regKey || targetUser?.username || cleanTargetName;
+
+    // 3. Look up active session if present
+    const sessionMatch = Array.from(activeSessions.values()).find(
+      (s) => s.user?.username?.toLowerCase() === lowerTarget
+    );
+
+    // 4. Collect ALL real IPs this member has ever entered with
+    const discoveredIps = new Set<string>();
+
+    const addIpIfValid = (candidate?: string) => {
+      if (!candidate) return;
+      const trimmed = candidate.trim();
+      if (!trimmed || trimmed === '192.168.1.100' || trimmed.toLowerCase() === 'unknown') return;
+      discoveredIps.add(trimmed);
+    };
+
+    // Live socket/online IPs
+    addIpIfValid(targetUser?.ipAddress);
+    addIpIfValid(targetUser?.ip);
+
+    // Persistent member real IP and full IP history
+    addIpIfValid(regMember?.ipAddress);
+    if (Array.isArray(regMember?.ipHistory)) {
+      regMember.ipHistory.forEach((ip) => addIpIfValid(ip));
+    }
+
+    // Active session stored IP
+    addIpIfValid(sessionMatch?.user?.ipAddress);
+    addIpIfValid(sessionMatch?.user?.ip);
+
+    // Cross-check ipToAccountsMap
+    for (const [ip, nicks] of ipToAccountsMap.entries()) {
+      if (Array.from(nicks).some((n) => n.toLowerCase() === lowerTarget)) {
+        addIpIfValid(ip);
       }
     }
 
-    if (!targetIp) {
-      targetIp = '192.168.1.100';
+    // Cross-check ban/jail records
+    for (const record of bannedRecords.values()) {
+      if (record.username.toLowerCase() === lowerTarget && record.ip) {
+        addIpIfValid(record.ip);
+      }
+    }
+    for (const record of jailedRecords.values()) {
+      if (record.username.toLowerCase() === lowerTarget && record.ip) {
+        addIpIfValid(record.ip);
+      }
     }
 
-    let nicksSet = ipToAccountsMap.get(targetIp);
-    if (!nicksSet) {
-      nicksSet = new Set([cleanTargetName]);
-      ipToAccountsMap.set(targetIp, nicksSet);
-    } else {
-      nicksSet.add(cleanTargetName);
-    }
-    const accounts = Array.from(nicksSet);
+    const ipHistoryList = Array.from(discoveredIps);
 
-    const resolvedDevice = targetUser?.deviceInfo || ipToDeviceMap.get(targetIp) || parseDeviceInfo(socket.handshake.headers['user-agent'] as string);
-    const resolvedCountry = targetUser?.flag || ipToCountryMap.get(targetIp) || '🇾🇪';
-    const resolvedFingerprint = targetUser?.deviceFingerprint || (registeredMembers[cleanTargetName] as any)?.deviceFingerprint || ipToFingerprintMap.get(targetIp) || 'FP-DEV-STANDARD';
+    // Determine primary IP: prefer live online IP, then registered IP, then latest from history
+    let primaryIp = targetUser?.ipAddress || regMember?.ipAddress || (ipHistoryList.length > 0 ? ipHistoryList[0] : '');
+    if (!primaryIp || primaryIp === '192.168.1.100') {
+      primaryIp = ipHistoryList.length > 0 ? ipHistoryList[0] : 'غير مسجل';
+    }
+
+    // 5. Correlate and discover ALL accounts sharing ANY of these real IPs or hardware fingerprints
+    const accountsSet = new Set<string>();
+    accountsSet.add(finalDisplayName);
+
+    // Correlate by all discovered real IPs
+    ipHistoryList.forEach((ip) => {
+      // From in-memory map
+      const mappedNicks = ipToAccountsMap.get(ip);
+      if (mappedNicks) {
+        mappedNicks.forEach((nick) => accountsSet.add(nick));
+      }
+      // From persistent registered members
+      for (const [mName, mData] of Object.entries(registeredMembers)) {
+        if (mData.ipAddress === ip || (Array.isArray(mData.ipHistory) && mData.ipHistory.includes(ip))) {
+          accountsSet.add(mName);
+        }
+      }
+      // From live users
+      users.forEach((u) => {
+        if (u.ipAddress === ip || u.ip === ip) {
+          accountsSet.add(u.username);
+        }
+      });
+    });
+
+    // Correlate by Hardware Fingerprint if available
+    const resolvedFingerprint =
+      targetUser?.deviceFingerprint ||
+      regMember?.deviceFingerprint ||
+      (primaryIp && primaryIp !== 'غير مسجل' ? ipToFingerprintMap.get(primaryIp) : undefined) ||
+      'FP-DEV-STANDARD';
+
+    if (resolvedFingerprint && resolvedFingerprint !== 'FP-DEV-STANDARD') {
+      for (const [mName, mData] of Object.entries(registeredMembers)) {
+        if (mData.deviceFingerprint === resolvedFingerprint) {
+          accountsSet.add(mName);
+        }
+      }
+      users.forEach((u) => {
+        if (u.deviceFingerprint === resolvedFingerprint) {
+          accountsSet.add(u.username);
+        }
+      });
+    }
+
+    const accounts = Array.from(accountsSet);
+
+    // 6. Device, country, presence and last seen resolution
+    const resolvedDevice =
+      targetUser?.deviceInfo ||
+      regMember?.deviceInfo ||
+      (Array.isArray(regMember?.deviceHistory) && regMember.deviceHistory[regMember.deviceHistory.length - 1]) ||
+      (primaryIp && primaryIp !== 'غير مسجل' ? ipToDeviceMap.get(primaryIp) : undefined) ||
+      'هاتف ذكي / كمبيوتر';
+
+    const resolvedCountry =
+      targetUser?.flag ||
+      regMember?.flag ||
+      (primaryIp && primaryIp !== 'غير مسجل' ? ipToCountryMap.get(primaryIp) : undefined) ||
+      '🇾🇪';
+
+    const isUserOnline = !!targetUser && targetUser.presenceState !== 'offline';
+    const resolvedRole = targetUser?.role || regMember?.role || 'member';
+    const resolvedRoom = isUserOnline ? (targetUser?.room || 'الغرفة العامة') : 'غير متصل (أوفلاين)';
+    const resolvedLastSeen = isUserOnline
+      ? 'متصل الآن'
+      : regMember?.lastSeen
+      ? new Date(regMember.lastSeen).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })
+      : 'غير متوفر';
 
     socket.emit('revealedNicksResult', {
-      targetUsername: cleanTargetName,
-      ip: targetIp,
+      targetUsername: finalDisplayName,
+      ip: primaryIp,
+      ipHistory: ipHistoryList,
       device: resolvedDevice,
       deviceFingerprint: resolvedFingerprint,
       country: resolvedCountry,
       accountsCount: accounts.length,
       accounts: accounts,
-      role: targetUser?.role || registeredMembers[cleanTargetName]?.role || 'member',
-      room: targetUser?.room || 'غير متصل حالياً',
+      role: resolvedRole,
+      room: resolvedRoom,
       flag: resolvedCountry,
-      isOnline: !!targetUser
+      isOnline: isUserOnline,
+      lastSeen: resolvedLastSeen
     });
 
     logMonitorEvent(
       'security',
-      `كشف نكات العضو [${cleanTargetName}] بواسطة ${admin.username} (IP: ${targetIp}, عدد العضويات: ${accounts.length})`,
+      `كشف نكات العضو [${finalDisplayName}] بواسطة ${admin.username} (IP: ${primaryIp}, عدد الآيبيهات: ${ipHistoryList.length}, عدد العضويات: ${accounts.length}, الحالة: ${isUserOnline ? 'متصل' : 'أوفلاين'})`,
       admin.username,
-      cleanTargetName
+      finalDisplayName
     );
   });
 
@@ -3866,6 +4133,9 @@ io.on('connection', (socket) => {
     const clientFingerprint = deviceFingerprint || `FP-${clientIp.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase() || 'STD'}`;
     ipToFingerprintMap.set(clientIp, clientFingerprint);
 
+    // Save audit connection details (IP history, device history, fingerprint, lastSeen) to persistent store
+    recordMemberAuditConnection(cleanUsername, clientIp, clientDevice, realFlag, clientFingerprint);
+
     if (reg) {
       reg.deviceFingerprint = clientFingerprint;
       saveMembers();
@@ -4078,8 +4348,13 @@ io.on('connection', (socket) => {
         filterAlerts,
         monitoredWords,
         rolePermissions,
-        serverSecurity
+        serverSecurity,
+        monitorLogs: monitorLogs.slice(0, 1000),
+        messageRetentionLimits
       });
+      socket.emit('monitorLogs', monitorLogs.slice(0, 1000));
+      socket.emit('messageRetentionLimitsUpdated', messageRetentionLimits);
+      socket.emit('monitoredWordsUpdated', monitoredWords);
     }
   });
 
@@ -5341,15 +5616,16 @@ io.on('connection', (socket) => {
         mediaUrl: cleanMediaUrl,
         mediaType: cleanMediaType,
         category: assignedCategory,
-        time: 'الآن',
+        time: getCurrentTimeString(),
         likes: 0,
         commentsCount: 0,
         timestamp: Date.now()
       };
 
       wallPosts.unshift(newPost);
-      if (wallPosts.length > 100) {
-        wallPosts = wallPosts.slice(0, 100);
+      const maxPosts = messageRetentionLimits.wallMaxPosts > 0 ? messageRetentionLimits.wallMaxPosts : 100;
+      if (wallPosts.length > maxPosts) {
+        wallPosts = wallPosts.slice(0, maxPosts);
       }
       saveWallPosts();
 
@@ -5403,7 +5679,7 @@ io.on('connection', (socket) => {
         avatarUrl: user.avatarUrl,
         nameBannerUrl: user.nameBannerUrl,
         text: sanitizeText(text),
-        time: 'الآن',
+        time: getCurrentTimeString(),
         timestamp: Date.now()
       };
       post.comments.push(newComment);
@@ -6657,6 +6933,9 @@ async function startServer() {
   const handleShutdown = async (signal?: string) => {
     try {
       console.log(`🛑 Server shutting down (${signal || 'manual'}), committing all pending database writes...`);
+      saveAuditLogs(true);
+      saveMonitoredWords();
+      saveMessageRetentionLimits();
       await dataManager.flush();
       io.close();
       httpServer.close();

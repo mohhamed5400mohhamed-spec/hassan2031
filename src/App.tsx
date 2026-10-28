@@ -337,10 +337,20 @@ export default function App() {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadStatusText, setUploadStatusText] = useState<string>('');
 
-  // Login Screen State (Screenshot 1)
-  const [activeTab, setActiveTab] = useState<'visitor' | 'member' | 'register'>('visitor');
-  const [usernameInput, setUsernameInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
+  // Login Screen State: Default to member login tab, with auto-fill from last session credentials
+  const [activeTab, setActiveTab] = useState<'visitor' | 'member' | 'register'>('member');
+  const [usernameInput, setUsernameInput] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('soqoor_last_member_username') || '';
+    }
+    return '';
+  });
+  const [passwordInput, setPasswordInput] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('soqoor_last_member_password') || '';
+    }
+    return '';
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [detectedFlag, setDetectedFlag] = useState<string>('🇾🇪');
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -522,6 +532,7 @@ export default function App() {
   const [revealedNicksData, setRevealedNicksData] = useState<{
     targetUsername: string;
     ip: string;
+    ipHistory?: string[];
     device?: string;
     deviceFingerprint?: string;
     country?: string;
@@ -531,6 +542,7 @@ export default function App() {
     room: string;
     flag: string;
     isOnline: boolean;
+    lastSeen?: string;
   } | null>(null);
   const [showRevealedNicksModal, setShowRevealedNicksModal] = useState(false);
 
@@ -714,6 +726,15 @@ export default function App() {
       });
     }
   }, [activeDrawer, selectedPmUser, socket]);
+
+  // Fetch freshest administrative data (monitor logs, filter words, message ceilings) upon opening monitor drawer
+  useEffect(() => {
+    if (activeDrawer === 'monitor' && socket && currentUser && (currentUser.role === 'admin' || currentUser.role === 'super')) {
+      socket.emit('getMonitorLogs');
+      socket.emit('getMonitoredWords');
+      socket.emit('getMessageRetentionLimits');
+    }
+  }, [activeDrawer, socket, currentUser]);
 
   // Message Reply & Voice Recording States
   const [replyingTo, setReplyingTo] = useState<{ id: string; username: string; text: string; mediaUrl?: string } | null>(null);
@@ -1282,6 +1303,50 @@ export default function App() {
     }
   };
 
+  // Smart and accurate time formatting for Wall posts & comments (الآن، منذ ٥ دقائق، اليوم ٠٩:٣٠ ص، أمس، التاريخ)
+  const formatWallTime = (timestamp?: number, fallbackTime?: string) => {
+    if (!timestamp) {
+      if (fallbackTime && fallbackTime !== 'الآن') return fallbackTime;
+      return 'الآن';
+    }
+    const now = Date.now();
+    const diffSec = Math.max(0, Math.floor((now - timestamp) / 1000));
+    if (diffSec < 60) return 'الآن';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `منذ ${diffMin} د`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) {
+      try {
+        const timeStr = new Date(timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+        return `اليوم ${timeStr}`;
+      } catch {
+        return `منذ ${diffHours} س`;
+      }
+    }
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) {
+      try {
+        const timeStr = new Date(timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+        return `أمس ${timeStr}`;
+      } catch {
+        return 'أمس';
+      }
+    }
+    if (diffDays < 7) {
+      return `منذ ${diffDays} أيام`;
+    }
+    try {
+      return new Date(timestamp).toLocaleDateString('ar-EG', {
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return fallbackTime || 'سابقاً';
+    }
+  };
+
   // 100% Reliable Auto-Scroll to latest messages (Direct scrollTop without outer window jumping)
   const scrollToBottom = (instant = false) => {
     if (chatContainerRef.current) {
@@ -1587,13 +1652,13 @@ export default function App() {
         return;
       }
 
-      // Immediately restore previous session on connect / reconnect using minimal session token and username
-      const savedToken = localStorage.getItem('soqoor_session_token') || sessionStorage.getItem('soqoor_session_token');
-      const savedUsername = localStorage.getItem('soqoor_session_username') || currentUserRef.current?.username;
-      if (savedToken || savedUsername) {
+      // Only restore previous session if the user is ALREADY logged in during the active app session and socket reconnected
+      if (currentUserRef.current) {
+        const savedToken = localStorage.getItem('soqoor_session_token') || sessionStorage.getItem('soqoor_session_token');
+        const savedUsername = currentUserRef.current.username;
         s.emit('restoreSession', {
           sessionToken: savedToken || undefined,
-          username: savedUsername || undefined,
+          username: savedUsername,
           room: currentUserRef.current?.room || 'الغرفة العامة',
           deviceFingerprint: generateDeviceFingerprint().fingerprintId
         });
@@ -1801,6 +1866,8 @@ export default function App() {
       filterAlerts?: any[];
       monitoredWords?: string[];
       rolePermissions?: any;
+      monitorLogs?: MonitorEvent[];
+      messageRetentionLimits?: MessageRetentionLimits;
     }) => {
       if (data.bannedList) setBannedList(data.bannedList);
       if (data.serverSecurity) setServerSecurity(data.serverSecurity);
@@ -1808,6 +1875,8 @@ export default function App() {
       if (data.filterAlerts) setFilterAlertsList(data.filterAlerts);
       if (data.monitoredWords) setMonitoredWordsList(data.monitoredWords);
       if (data.rolePermissions) setRolePermissions(data.rolePermissions);
+      if (data.monitorLogs) setMonitorLogs(data.monitorLogs);
+      if (data.messageRetentionLimits) setMessageRetentionLimits(data.messageRetentionLimits);
     });
 
     // Emblems and Custom Emojis update listener
@@ -2315,6 +2384,14 @@ export default function App() {
       if (sessionToken) {
         localStorage.setItem('soqoor_session_token', sessionToken);
         localStorage.setItem('soqoor_session_username', user.username);
+      }
+      if (user.role !== 'guest') {
+        try {
+          localStorage.setItem('soqoor_last_member_username', user.username);
+          if (passwordInput) {
+            localStorage.setItem('soqoor_last_member_password', passwordInput);
+          }
+        } catch {}
       }
       requestScreenWakeLock();
       startSilentAudioKeepAlive();
@@ -2879,6 +2956,15 @@ export default function App() {
     const defaultQuote = activeTab === 'visitor' ? 'زائر' : 'عضو جديد';
     const clientFingerprint = generateDeviceFingerprint().fingerprintId;
 
+    if (activeTab === 'member' || activeTab === 'register') {
+      try {
+        localStorage.setItem('soqoor_last_member_username', usernameInput.trim());
+        if (passwordInput) {
+          localStorage.setItem('soqoor_last_member_password', passwordInput);
+        }
+      } catch {}
+    }
+
     socket.emit('joinRoom', {
       username: usernameInput.trim(),
       room: 'الغرفة العامة', // Direct automatic entry to default room
@@ -2911,8 +2997,11 @@ export default function App() {
     setPrivateMessages([]);
     setUnreadPerUser({});
     setActiveDrawer('none');
-    setUsernameInput('');
-    setPasswordInput('');
+    const savedLastUser = localStorage.getItem('soqoor_last_member_username') || '';
+    const savedLastPass = localStorage.getItem('soqoor_last_member_password') || '';
+    setUsernameInput(savedLastUser);
+    setPasswordInput(savedLastPass);
+    setActiveTab('member');
     showToast('تم تسجيل الخروج بنجاح وإنهاء جلستك 🧹', 'info');
   };
 
@@ -4202,8 +4291,10 @@ export default function App() {
             <button
               onClick={() => {
                 setActiveTab('member');
-                setUsernameInput('');
-                setPasswordInput('');
+                const lastUser = localStorage.getItem('soqoor_last_member_username') || '';
+                const lastPass = localStorage.getItem('soqoor_last_member_password') || '';
+                if (lastUser) setUsernameInput(lastUser);
+                if (lastPass) setPasswordInput(lastPass);
                 setLoginError(null);
               }}
               className={`py-3 flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
@@ -5171,32 +5262,69 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  revealedNicksData.isOnline ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  revealedNicksData.isOnline ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
                 }`}>
-                  {revealedNicksData.isOnline ? '● متصل الآن' : 'غير متصل'}
+                  {revealedNicksData.isOnline
+                    ? '● متصل الآن'
+                    : `● غير متصل ${revealedNicksData.lastSeen ? `(آخر ظهور: ${revealedNicksData.lastSeen})` : ''}`}
                 </span>
               </div>
 
               {/* IP Address Card with Copy Button */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-300 space-y-1.5">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-300 space-y-2">
                 <div className="text-[10px] font-bold text-slate-500 flex items-center justify-between">
                   <span>عنوان الآي بي المكتشف (Real IP Address):</span>
                   <span className="text-emerald-700 font-mono">حقيقي ومتحقق منه ✔️</span>
                 </div>
                 <div className="flex items-center justify-between p-2 bg-slate-900 text-amber-300 rounded-lg font-mono text-sm font-bold shadow-inner">
-                  <span className="tracking-wider">{revealedNicksData.ip}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(revealedNicksData.ip);
-                      showToast(`تم نسخ الآي بي: ${revealedNicksData.ip} 📋`, 'success');
-                    }}
-                    className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-black text-[10px] font-black rounded cursor-pointer transition-colors"
-                  >
-                    نسخ الـ IP
-                  </button>
+                  <span className="tracking-wider">{revealedNicksData.ip || 'غير مسجل'}</span>
+                  {revealedNicksData.ip && revealedNicksData.ip !== 'غير مسجل' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(revealedNicksData.ip);
+                        showToast(`تم نسخ الآي بي: ${revealedNicksData.ip} 📋`, 'success');
+                      }}
+                      className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-black text-[10px] font-black rounded cursor-pointer transition-colors"
+                    >
+                      نسخ الـ IP
+                    </button>
+                  )}
                 </div>
+
+                {/* All historical real IPs used by this member (سجل جميع الآيبيهات الحقيقية التي دخل بها العضو أوفلاين وأونلاين) */}
+                {revealedNicksData.ipHistory && revealedNicksData.ipHistory.length > 0 && (
+                  <div className="pt-1.5 border-t border-slate-200">
+                    <div className="text-[10px] font-bold text-slate-600 mb-1 flex items-center justify-between">
+                      <span>سجل الآيبيهات الحقيقية التي دخل بها ({revealedNicksData.ipHistory.length}):</span>
+                      <span className="text-[9px] text-slate-500 font-normal">شامل أوفلاين وأونلاين</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                      {revealedNicksData.ipHistory.map((histIp, hIdx) => (
+                        <div
+                          key={hIdx}
+                          className="flex items-center gap-1.5 px-2 py-0.5 bg-white border border-slate-300 rounded text-[11px] font-mono text-slate-800 shadow-2xs"
+                        >
+                          <span className={histIp === revealedNicksData.ip ? 'font-black text-amber-600' : ''}>
+                            {histIp}
+                          </span>
+                          <button
+                            type="button"
+                            title="نسخ هذا الـ IP"
+                            onClick={() => {
+                              navigator.clipboard.writeText(histIp);
+                              showToast(`تم نسخ الآي بي: ${histIp} 📋`, 'success');
+                            }}
+                            className="text-[9px] px-1 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded cursor-pointer transition-colors"
+                          >
+                            نسخ
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Device and Country Cards (اسم الجهاز والدولة والعلم) */}
@@ -8869,7 +8997,9 @@ export default function App() {
                         {post.flag && <span className="text-xs">{post.flag}</span>}
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-slate-400 font-mono">{post.time}</span>
+                        <span className="text-[11px] text-slate-400 font-mono" title={post.timestamp ? new Date(post.timestamp).toLocaleString('ar-EG') : undefined}>
+                          {formatWallTime(post.timestamp, post.time)}
+                        </span>
                         {currentUser && (post.username.toLowerCase() === currentUser.username.toLowerCase() || currentUser.role === 'admin' || currentUser.role === 'super') && (
                           <div className="flex items-center gap-1.5">
                             <button
@@ -9049,7 +9179,9 @@ export default function App() {
                                       </button>
                                     )}
                                   </div>
-                                  <span className="font-mono">{cm.time}</span>
+                                  <span className="font-mono text-[10px] text-slate-400" title={cm.timestamp ? new Date(cm.timestamp).toLocaleString('ar-EG') : undefined}>
+                                    {formatWallTime(cm.timestamp, cm.time)}
+                                  </span>
                                 </div>
                                 <div className="text-slate-700 leading-snug [overflow-wrap:anywhere] break-words" dir="auto">
                                   {renderFormattedMessageText(cm.text)}
