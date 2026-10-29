@@ -78,6 +78,8 @@ import { VoiceRecorder, VoicePlayer, VoiceNoteData } from './components/VoiceNot
 export interface RecentLoginEntry {
   username: string;
   avatar: string;
+  avatarUrl?: string;
+  nameBannerUrl?: string;
   flag: string;
   room: string;
   role: string;
@@ -1866,7 +1868,18 @@ export default function App() {
         }
       }
       if ((data as any).recentLogins && Array.isArray((data as any).recentLogins)) {
-        setRecentLogins((data as any).recentLogins);
+        const mapped: RecentLoginEntry[] = (data as any).recentLogins.map((e: any) => ({
+          username: e.username,
+          avatar: e.avatar || e.avatarUrl || falconIcon,
+          avatarUrl: e.avatarUrl || e.avatar || falconIcon,
+          nameBannerUrl: e.nameBannerUrl,
+          flag: e.flag || '🇾🇪',
+          room: e.room || 'الغرفة العامة',
+          role: e.role || 'member',
+          loginTime: e.loginTime || e.time || 'الآن',
+          timestamp: e.timestamp || Date.now()
+        }));
+        setRecentLogins(mapped);
       }
       if ((data as any).messageRetentionLimits) {
         setMessageRetentionLimits((data as any).messageRetentionLimits);
@@ -1878,7 +1891,18 @@ export default function App() {
     // Recent logins real-time listener (آخر 10 دخلوا الشات)
     s.on('recentLoginsUpdated', (list: RecentLoginEntry[]) => {
       if (Array.isArray(list)) {
-        setRecentLogins(list);
+        const mapped: RecentLoginEntry[] = list.map((e: any) => ({
+          username: e.username,
+          avatar: e.avatar || e.avatarUrl || falconIcon,
+          avatarUrl: e.avatarUrl || e.avatar || falconIcon,
+          nameBannerUrl: e.nameBannerUrl,
+          flag: e.flag || '🇾🇪',
+          room: e.room || 'الغرفة العامة',
+          role: e.role || 'member',
+          loginTime: e.loginTime || e.time || 'الآن',
+          timestamp: e.timestamp || Date.now()
+        }));
+        setRecentLogins(mapped);
       }
     });
 
@@ -3764,6 +3788,22 @@ export default function App() {
     return fallbackUrl || undefined;
   };
 
+  // Helper to resolve a member's avatar photo anywhere across the app
+  const getUserAvatar = (username?: string, fallbackUrl?: string): string => {
+    if (!username) return fallbackUrl || falconIcon;
+    const clean = username.trim().toLowerCase();
+    if (currentUser && currentUser.username.trim().toLowerCase() === clean && currentUser.avatarUrl) {
+      return currentUser.avatarUrl;
+    }
+    const inRoster = rosterUsers.find((u) => u.username.trim().toLowerCase() === clean);
+    if (inRoster?.avatarUrl) return inRoster.avatarUrl;
+    const inAll = allConnectedUsers.find((u) => u.username.trim().toLowerCase() === clean);
+    if (inAll?.avatarUrl) return inAll.avatarUrl;
+    const inReg = allRegisteredMembers.find((m) => m.username.trim().toLowerCase() === clean);
+    if (inReg?.avatarUrl) return inReg.avatarUrl;
+    return fallbackUrl || falconIcon;
+  };
+
   // Open profile modal by username directly
   const openUserProfileByName = (username: string) => {
     if (!username) return;
@@ -4501,8 +4541,16 @@ export default function App() {
           {/* Members List (Online or Last 10 Logins) */}
           <div className="flex-1 bg-white text-slate-800 divide-y divide-slate-200 overflow-y-auto modal-scroll-container overscroll-contain">
             {loginListTab === 'online' ? (
-              rosterUsers.length > 0 ? (
-                rosterUsers.map((user) => (
+              (() => {
+                const displayOnlineUsers = allConnectedUsers.length > 0 ? allConnectedUsers : rosterUsers;
+                if (displayOnlineUsers.length === 0) {
+                  return (
+                    <div className="p-8 text-center text-slate-400 text-xs font-bold">
+                      لا يوجد متواجدون حالياً .. كن أول من يدخل! 🦅
+                    </div>
+                  );
+                }
+                return displayOnlineUsers.map((user) => (
                   <div
                     key={user.id}
                     onClick={() => {
@@ -4514,9 +4562,12 @@ export default function App() {
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="relative flex-shrink-0">
                         <img
-                          src={user.avatarUrl || falconIcon}
+                          src={getUserAvatar(user.username, user.avatarUrl)}
                           alt={user.username}
                           className="w-12 h-12 rounded-lg object-cover border border-slate-300 shadow-sm"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = falconIcon;
+                          }}
                         />
                         {/* Presence Dot: 🟢 Online, 🟡 Away (in background), ⚪ Offline */}
                         {user.presenceState === 'away' ? (
@@ -4532,13 +4583,45 @@ export default function App() {
                       </div>
 
                       <div className="min-w-0 text-right">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-900 font-serif">
-                            {user.username}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {(() => {
+                            const bannerUrl = getUserBanner(user.username, user.nameBannerUrl);
+                            if (bannerUrl) {
+                              return (
+                                <img
+                                  src={bannerUrl}
+                                  alt={user.username}
+                                  title={user.username}
+                                  className="h-5 max-h-[22px] max-w-[150px] object-contain rounded inline-block shadow-2xs"
+                                />
+                              );
+                            }
+                            return (
+                              <span className="font-bold text-sm text-slate-900 font-serif">
+                                {user.username}
+                              </span>
+                            );
+                          })()}
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-bold border border-amber-300">
+                            {getRoleBadge(user.role).short}
                           </span>
                         </div>
-                        <div className="text-xs text-slate-600 truncate max-w-[210px] mt-0.5">
-                          {user.statusQuote || '..'}
+                        <div className="text-[11px] text-slate-600 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className="text-emerald-700 font-semibold text-[10px]">
+                            غرفة: {user.room || 'الغرفة العامة'}
+                          </span>
+                          <span className="text-slate-400">•</span>
+                          <span className="text-amber-800 font-bold text-[10px] bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                            دخل {formatAppRelativeTime(user.joinedAt || user.lastActiveTime)}
+                          </span>
+                          {user.statusQuote && (
+                            <>
+                              <span className="text-slate-400">•</span>
+                              <span className="text-slate-500 truncate max-w-[120px] text-[10px]">
+                                {user.statusQuote}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -4553,12 +4636,8 @@ export default function App() {
                       )}
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="p-8 text-center text-slate-400 text-xs font-bold">
-                  لا يوجد متواجدون حالياً .. كن أول من يدخل! 🦅
-                </div>
-              )
+                ));
+              })()
             ) : (
               recentLogins.length > 0 ? (
                 recentLogins.map((entry, idx) => (
@@ -4573,9 +4652,12 @@ export default function App() {
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="relative flex-shrink-0">
                         <img
-                          src={entry.avatar || falconIcon}
+                          src={getUserAvatar(entry.username, entry.avatar || entry.avatarUrl)}
                           alt={entry.username}
                           className="w-12 h-12 rounded-lg object-cover border-2 border-amber-300 shadow-sm"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = falconIcon;
+                          }}
                         />
                         <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-slate-950 font-black text-[9px] flex items-center justify-center border border-white shadow-2xs">
                           {idx + 1}
@@ -4584,20 +4666,35 @@ export default function App() {
 
                       <div className="min-w-0 text-right">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-bold text-sm text-slate-900 font-serif">
-                            {entry.username}
-                          </span>
+                          {(() => {
+                            const bannerUrl = getUserBanner(entry.username, entry.nameBannerUrl);
+                            if (bannerUrl) {
+                              return (
+                                <img
+                                  src={bannerUrl}
+                                  alt={entry.username}
+                                  title={entry.username}
+                                  className="h-5 max-h-[22px] max-w-[150px] object-contain rounded inline-block shadow-2xs"
+                                />
+                              );
+                            }
+                            return (
+                              <span className="font-bold text-sm text-slate-900 font-serif">
+                                {entry.username}
+                              </span>
+                            );
+                          })()}
                           <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-bold border border-amber-300">
                             {getRoleBadge(entry.role).short}
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-600 flex items-center gap-1.5 mt-0.5">
-                          <span className="text-emerald-700 font-semibold">
+                        <div className="text-[11px] text-slate-600 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className="text-emerald-700 font-semibold text-[10px]">
                             غرفة: {entry.room || 'الغرفة العامة'}
                           </span>
                           <span className="text-slate-400">•</span>
-                          <span className="text-slate-500 font-mono text-[10px]">
-                            {entry.loginTime}
+                          <span className="text-amber-800 font-bold text-[10px] bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                            دخل {formatAppRelativeTime(entry.timestamp, entry.loginTime)}
                           </span>
                         </div>
                       </div>

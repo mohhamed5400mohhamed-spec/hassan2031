@@ -429,6 +429,8 @@ export interface UserSession {
 export interface RecentLoginEntry {
   username: string;
   avatarUrl?: string;
+  avatar?: string;
+  nameBannerUrl?: string;
   flag: string;
   room: string;
   role: string;
@@ -439,8 +441,15 @@ export interface RecentLoginEntry {
 let recentLogins: RecentLoginEntry[] = [];
 
 function recordRecentLogin(entry: RecentLoginEntry) {
+  const member = registeredMembers[entry.username] || registeredMembers[entry.username.toLowerCase()];
+  const enrichedEntry: RecentLoginEntry = {
+    ...entry,
+    avatarUrl: entry.avatarUrl || entry.avatar || member?.avatarUrl,
+    avatar: entry.avatar || entry.avatarUrl || member?.avatarUrl,
+    nameBannerUrl: entry.nameBannerUrl || member?.nameBannerUrl
+  };
   recentLogins = [
-    entry,
+    enrichedEntry,
     ...recentLogins.filter((e) => e.username.toLowerCase() !== entry.username.toLowerCase())
   ].slice(0, 10);
   io.emit('recentLoginsUpdated', recentLogins);
@@ -451,9 +460,12 @@ function getRecentLogins(): RecentLoginEntry[] {
   const entries: RecentLoginEntry[] = [];
   for (const session of activeSessions.values()) {
     if (session.user && !session.isExplicitlyLoggedOut) {
+      const member = registeredMembers[session.user.username] || registeredMembers[session.user.username.toLowerCase()];
       entries.push({
         username: session.user.username,
-        avatarUrl: session.user.avatarUrl,
+        avatarUrl: session.user.avatarUrl || member?.avatarUrl,
+        avatar: session.user.avatarUrl || member?.avatarUrl,
+        nameBannerUrl: session.user.nameBannerUrl || member?.nameBannerUrl,
         flag: session.user.flag || '🇾🇪',
         room: session.user.room || 'الغرفة العامة',
         role: session.user.role || 'member',
@@ -2395,13 +2407,14 @@ io.on('connection', (socket) => {
   const cfCountry = (socket.handshake.headers['cf-ipcountry'] as string) || '';
   const detectedRealFlag = getFlagFromCountryCode(cfCountry);
 
-  const currentConnectedCount = getPresenceSnapshot().filter((u) => u.presenceState !== 'offline').length;
+  const onlineUsersSnapshot = getPresenceSnapshot().filter((u) => u.presenceState !== 'offline');
+  const currentConnectedCount = onlineUsersSnapshot.length;
   io.emit('onlineCountUpdated', currentConnectedCount);
 
-  // Send minimal initial configuration payload (<2KB)
+  // Send initial configuration payload with currently connected users and recent logins
   socket.emit('initialRoster', {
     onlineCount: currentConnectedCount,
-    users: [],
+    users: onlineUsersSnapshot,
     rooms: getChatRoomsWithLiveCounts(),
     roomStats: getRoomStatistics(),
     shortcuts: chatShortcuts,
@@ -2420,6 +2433,9 @@ io.on('connection', (socket) => {
       blockExternalLinks: serverSecurity.blockExternalLinks
     }
   });
+
+  socket.emit('allUsers', getPresenceSnapshot());
+  socket.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
 
   socket.emit('recentLoginsUpdated', getRecentLogins());
   socket.emit('messageRetentionLimitsUpdated', messageRetentionLimits);
