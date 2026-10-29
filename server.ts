@@ -181,7 +181,7 @@ app.post('/api/upload-media', async (req, res) => {
  * Automatically decodes and converts any incoming data: URL / Base64 into a local /uploads file,
  * strictly guaranteeing that Socket.IO message payloads contain only tiny URL strings (<1KB).
  */
-export function ensureMediaUrlNotBase64(url: string | undefined): string | undefined {
+export async function ensureMediaUrlNotBase64(url: string | undefined): Promise<string | undefined> {
   if (!url || typeof url !== 'string') return url;
   if (!url.startsWith('data:')) return url;
 
@@ -203,11 +203,19 @@ export function ensureMediaUrlNotBase64(url: string | undefined): string | undef
     else if (mime.includes('ogg') || mime.includes('audio') || mime.includes('wav')) ext = 'wav';
 
     const filename = `media_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${ext}`;
+
+    // Upload via storageManager (which uses Cloudinary when configured)
+    const uploadResult = await storageManager.saveBuffer(buffer, filename, mime);
+    if (uploadResult && uploadResult.success && uploadResult.url) {
+      return uploadResult.url;
+    }
+
+    // Fallback: only if external cloud storage failed or unconfigured, write locally
     const filePath = path.join(uploadsDir, filename);
     fs.writeFileSync(filePath, buffer);
     return `/uploads/${filename}`;
   } catch (err) {
-    console.warn('Failed to sanitize base64 media to file:', err);
+    console.warn('Failed to sanitize base64 media to storage:', err);
     return url;
   }
 }
@@ -996,9 +1004,11 @@ export let messageRetentionLimits: MessageRetentionLimits = {
 export function saveMessageRetentionLimits() {
   try {
     dataManager.save('message_retention_limits', messageRetentionLimits);
-    const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
-    const localFile = path.join(localDir, 'message_retention_limits.json');
-    fs.writeFileSync(localFile, JSON.stringify(messageRetentionLimits, null, 2), 'utf8');
+    if (!dataManager.isCloudConnected()) {
+      const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
+      const localFile = path.join(localDir, 'message_retention_limits.json');
+      fs.writeFileSync(localFile, JSON.stringify(messageRetentionLimits, null, 2), 'utf8');
+    }
   } catch (err) {
     console.error('Error saving message retention limits:', err);
   }
@@ -1247,9 +1257,11 @@ export function loadGlobalAppearance() {
 export function saveMonitoredWords() {
   try {
     dataManager.saveMonitoredWords(monitoredWords);
-    const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
-    const localFile = path.join(localDir, 'monitored_words.json');
-    fs.writeFileSync(localFile, JSON.stringify(monitoredWords, null, 2), 'utf8');
+    if (!dataManager.isCloudConnected()) {
+      const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
+      const localFile = path.join(localDir, 'monitored_words.json');
+      fs.writeFileSync(localFile, JSON.stringify(monitoredWords, null, 2), 'utf8');
+    }
   } catch (err) {
     console.error('Error saving monitored words:', err);
   }
@@ -1469,9 +1481,11 @@ function saveAuditLogs(immediate = false) {
     }
     try {
       dataManager.saveAuditLogs(monitorLogs.slice(0, 10000));
-      const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
-      const localFile = path.join(localDir, 'admin_audit_logs.json');
-      fs.writeFileSync(localFile, JSON.stringify(monitorLogs.slice(0, 10000), null, 2), 'utf8');
+      if (!dataManager.isCloudConnected()) {
+        const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
+        const localFile = path.join(localDir, 'admin_audit_logs.json');
+        fs.writeFileSync(localFile, JSON.stringify(monitorLogs.slice(0, 10000), null, 2), 'utf8');
+      }
     } catch (err) {
       console.error('Error saving persistent audit logs immediately:', err);
     }
@@ -1482,9 +1496,11 @@ function saveAuditLogs(immediate = false) {
     auditSaveTimer = null;
     try {
       dataManager.saveAuditLogs(monitorLogs.slice(0, 10000));
-      const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
-      const localFile = path.join(localDir, 'admin_audit_logs.json');
-      fs.writeFileSync(localFile, JSON.stringify(monitorLogs.slice(0, 10000), null, 2), 'utf8');
+      if (!dataManager.isCloudConnected()) {
+        const localDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname);
+        const localFile = path.join(localDir, 'admin_audit_logs.json');
+        fs.writeFileSync(localFile, JSON.stringify(monitorLogs.slice(0, 10000), null, 2), 'utf8');
+      }
     } catch (err) {
       console.error('Error saving persistent audit logs:', err);
     }
@@ -4380,7 +4396,7 @@ io.on('connection', (socket) => {
   // Chat message event (Supports text + mediaUrl + voiceNote + replyTo)
   socket.on(
     'chatMessage',
-    ({
+    async ({
       text,
       mediaUrl,
       mediaType,
@@ -4457,13 +4473,13 @@ io.on('connection', (socket) => {
     // Automatic Chat Shortcut Expansion (توسيع واستبدال الاختصارات تلقائياً)
     const expandedMsg = cleanMsg ? expandShortcuts(cleanMsg) : '';
 
-    // Guarantee short URLs (<1KB payload) by converting any client base64 to local disk storage
-    const safeMediaUrl = ensureMediaUrlNotBase64(mediaUrl);
+    // Guarantee short URLs (<1KB payload) by converting any client base64 to cloud/local storage
+    const safeMediaUrl = await ensureMediaUrlNotBase64(mediaUrl);
     let safeVoiceNote = voiceNote;
     if (voiceNote?.audioUrl) {
       safeVoiceNote = {
         ...voiceNote,
-        audioUrl: ensureMediaUrlNotBase64(voiceNote.audioUrl) || voiceNote.audioUrl
+        audioUrl: (await ensureMediaUrlNotBase64(voiceNote.audioUrl)) || voiceNote.audioUrl
       };
     }
 
@@ -6097,7 +6113,7 @@ io.on('connection', (socket) => {
   // Private Messages (المحادثات الخاصة الصوتية والكتابية مع مؤشرات القراءة والرسائل ذاتية الاختفاء)
   socket.on(
     'privateMessage',
-    ({
+    async ({
       toId,
       toUsername,
       text,
@@ -6144,12 +6160,12 @@ io.on('connection', (socket) => {
         const now = Date.now();
         const validSelfDestruct = typeof selfDestructSeconds === 'number' && selfDestructSeconds > 0 ? selfDestructSeconds : undefined;
 
-        const safePmMediaUrl = ensureMediaUrlNotBase64(mediaUrl);
+        const safePmMediaUrl = await ensureMediaUrlNotBase64(mediaUrl);
         let safePmVoiceNote = voiceNote;
         if (voiceNote?.audioUrl) {
           safePmVoiceNote = {
             ...voiceNote,
-            audioUrl: ensureMediaUrlNotBase64(voiceNote.audioUrl) || voiceNote.audioUrl
+            audioUrl: (await ensureMediaUrlNotBase64(voiceNote.audioUrl)) || voiceNote.audioUrl
           };
         }
 

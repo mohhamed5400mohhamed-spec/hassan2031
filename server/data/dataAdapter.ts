@@ -403,7 +403,9 @@ export class MongoDbDataDriver implements IDataDriver {
       }
     }
     await Promise.all(promises);
-    await this.localFallback.flush();
+    if (!this.isConnected) {
+      await this.localFallback.flush();
+    }
   }
 
   private async initConnection() {
@@ -446,8 +448,6 @@ export class MongoDbDataDriver implements IDataDriver {
         if (doc && doc._id && doc.data !== undefined) {
           const key = String(doc._id);
           this.memoryCache.set(key, doc.data);
-          // Sync to local file as backup
-          this.localFallback.save(key, doc.data).catch(() => {});
           count++;
         }
       }
@@ -457,7 +457,7 @@ export class MongoDbDataDriver implements IDataDriver {
         this.readyResolve = null;
       }
       if (count > 0) {
-        console.log(`[Data Layer - MongoDB] 📦 Hydrated ${count} collections from MongoDB into active memory and local cache.`);
+        console.log(`[Data Layer - MongoDB] 📦 Hydrated ${count} collections directly from MongoDB into active memory.`);
       }
 
       // Notify any registered listeners that cloud hydration has completed
@@ -496,11 +496,11 @@ export class MongoDbDataDriver implements IDataDriver {
         const doc = await col.findOne({ _id: collection as any });
         if (doc && doc.data !== undefined) {
           this.memoryCache.set(collection, doc.data);
-          this.localFallback.save(collection, doc.data).catch(() => {});
           return doc.data as T;
         }
       } catch (err) {
-        console.warn(`[Data Layer - MongoDB] Error querying "${collection}", using cache:`, err);
+        console.warn(`[Data Layer - MongoDB] Error querying "${collection}", using fallback:`, err);
+        return this.localFallback.load(collection, defaultValue);
       }
     }
     return this.loadSync<T>(collection, defaultValue);
@@ -510,35 +510,39 @@ export class MongoDbDataDriver implements IDataDriver {
     // 1. Instantly update active memory cache
     this.memoryCache.set(collection, data);
 
-    // 2. Persist locally for instant durability
-    await this.localFallback.save(collection, data);
+    // 2. If MongoDB is connected, save directly and exclusively to MongoDB
+    if (this.isConnected && this.db) {
+      if (this.pendingSaves.has(collection)) {
+        clearTimeout(this.pendingSaves.get(collection)!);
+      }
 
-    // 3. Debounce write to MongoDB
-    if (this.pendingSaves.has(collection)) {
-      clearTimeout(this.pendingSaves.get(collection)!);
+      const timer = setTimeout(async () => {
+        this.pendingSaves.delete(collection);
+        if (this.isConnected && this.db) {
+          try {
+            const col = this.db.collection('app_collections');
+            await col.updateOne(
+              { _id: collection as any },
+              { $set: { data, updatedAt: new Date() } },
+              { upsert: true }
+            );
+          } catch (err: any) {
+            console.error(`[Data Layer - MongoDB] Failed to write collection "${collection}" to MongoDB, falling back to local replica:`, err.message || err);
+            // Fall back to local storage only if MongoDB write failed
+            await this.localFallback.save(collection, data);
+          }
+        } else {
+          // If MongoDB disconnected in the interim, fall back to local
+          await this.localFallback.save(collection, data);
+        }
+      }, 300);
+
+      this.pendingSaves.set(collection, timer);
+      return;
     }
 
-    const timer = setTimeout(async () => {
-      this.pendingSaves.delete(collection);
-      // If still connecting, wait before issuing upsert
-      if (!this.isHydrated) {
-        await this.whenReady(3000);
-      }
-      if (this.isConnected && this.db) {
-        try {
-          const col = this.db.collection('app_collections');
-          await col.updateOne(
-            { _id: collection as any },
-            { $set: { data, updatedAt: new Date() } },
-            { upsert: true }
-          );
-        } catch (err: any) {
-          console.error(`[Data Layer - MongoDB] Failed to write collection "${collection}" to MongoDB:`, err.message || err);
-        }
-      }
-    }, 400);
-
-    this.pendingSaves.set(collection, timer);
+    // 3. Fallback: ONLY when MongoDB is disconnected, stopped, or unavailable, persist locally
+    await this.localFallback.save(collection, data);
   }
 
   async delete(collection: string): Promise<void> {

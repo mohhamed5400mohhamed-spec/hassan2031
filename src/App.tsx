@@ -898,7 +898,7 @@ export default function App() {
   // These are only first-paint fallbacks. The persisted admin values arrive from
   // the server's globalAppearance payload and replace them before the app is shown.
   const [activeTheme, setActiveTheme] = useState<string>('dark-gold');
-  const [pinnedTopic, setPinnedTopic] = useState<string>('🦅 مرحباً بكم في شات حسان برو ملتقى الأحبة والأصالة • نرجو الالتزام بآداب الحوار');
+  const [pinnedTopic, setPinnedTopic] = useState<string>('');
   const [userMood, setUserMood] = useState<string>(() => {
     try {
       return localStorage.getItem('soqoor_user_mood') || 'مروق ☕';
@@ -1984,7 +1984,6 @@ export default function App() {
         setFalconAvatarIcon(data.logoUrl);
         try { localStorage.setItem('falcon_avatar_icon', data.logoUrl); } catch {}
       }
-      showToast('📢 تم تطبيق وتعميم الثيم والخط العام على كافة الشات من الإدارة', 'info');
     });
 
     // Role Permissions live listener
@@ -6682,24 +6681,6 @@ export default function App() {
             } ${eyeComfort ? 'eye-comfort-filter' : ''}`}
             style={{ fontFamily: FONTS_LIST.find((f) => f.id === fontFamily)?.family || 'Cairo, sans-serif' }}
           >
-          {/* Sticky Pinned Topic / Announcement Banner (تثبيت إعلان الغرفة) */}
-          {pinnedTopic && (
-            <div className="sticky top-0 z-10 bg-gradient-to-r from-[#241a12] via-[#3a291b] to-[#241a12] text-amber-200 px-3 py-1.5 rounded-xl shadow-md border border-amber-500/40 flex items-center justify-between text-xs mb-1 backdrop-blur-md">
-              <div className="flex items-center gap-2 min-w-0">
-                <Pin className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 animate-bounce" />
-                <span className="font-bold text-[11px] truncate text-amber-100">{pinnedTopic}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPinnedTopic('')}
-                className="text-amber-400 hover:text-white p-0.5 cursor-pointer ml-1"
-                title="إخفاء الإعلان المثبت"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
           {/* Message Stream */}
           {(() => {
             const currentRoom = currentUser?.room ? currentUser.room.trim().toLowerCase() : null;
