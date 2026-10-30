@@ -48,6 +48,8 @@ import {
   Timer,
   ChevronDown,
   Lock,
+  Unlock,
+  BellOff,
   Search,
   Gift,
   Play,
@@ -811,6 +813,30 @@ export default function App() {
   const [selectedMentionSound, setSelectedMentionSound] = useState<MentionSoundId>(sounds.getMentionSound());
   const [selectedAlertSound, setSelectedAlertSound] = useState<AlertSoundId>(sounds.getAlertSound());
   const [soundsMuted, setSoundsMuted] = useState<boolean>(sounds.isMuted());
+
+  // Settings: Member options for disabling PMs and Muting/Disabling all notifications
+  const [isPmDisabled, setIsPmDisabled] = useState<boolean>(() => Boolean(currentUser?.isPmDisabled));
+  const [allNotificationsDisabled, setAllNotificationsDisabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('soqoor_notifications_disabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const allNotificationsDisabledRef = useRef(allNotificationsDisabled);
+  useEffect(() => {
+    allNotificationsDisabledRef.current = allNotificationsDisabled;
+    if (allNotificationsDisabled) {
+      sounds.setMuted(true);
+      setSoundsMuted(true);
+    }
+  }, [allNotificationsDisabled]);
+
+  useEffect(() => {
+    if (currentUser?.isPmDisabled !== undefined) {
+      setIsPmDisabled(Boolean(currentUser.isPmDisabled));
+    }
+  }, [currentUser?.isPmDisabled]);
 
   // Dedicated Sound Center Modal & Test Sequencer (مركز التنبيهات الصوتية المخصصة)
   const [showSoundModal, setShowSoundModal] = useState<boolean>(false);
@@ -2569,11 +2595,13 @@ export default function App() {
 
           if (isMentioned) {
             sounds.playMentionPing();
-            showToast(`قام @${msg.username} بالإشارة إليك في الدردشة! 🔔`, 'info');
-            // Web Notifications API: Trigger notification even when tab is in background or screen is locked
-            notifyMention(msg.username, msg.text, currentU.room || 'الغرفة العامة', {
-              avatarUrl: msg.avatarUrl
-            }).catch(() => {});
+            if (!allNotificationsDisabledRef.current) {
+              showToast(`قام @${msg.username} بالإشارة إليك في الدردشة! 🔔`, 'info');
+              // Web Notifications API: Trigger notification even when tab is in background or screen is locked
+              notifyMention(msg.username, msg.text, currentU.room || 'الغرفة العامة', {
+                avatarUrl: msg.avatarUrl
+              }).catch(() => {});
+            }
           } else if (msg.badge && (msg.badge.includes('إشعار عام') || msg.badge.includes('إدارة') || msg.badge.includes('إعلان') || msg.badge.includes('تنبيه'))) {
             sounds.playGeneralAlertPing();
           } else {
@@ -2680,9 +2708,10 @@ export default function App() {
           setNotificationCount((c) => c + 1);
 
           // Web Notifications API: Trigger background/lockscreen push notification
-          notifyPrivateMessage(pm.fromUsername, pm.text, {
-            avatarUrl: pm.fromAvatar,
-            onOpenPm: () => {
+          if (!allNotificationsDisabledRef.current) {
+            notifyPrivateMessage(pm.fromUsername, pm.text, {
+              avatarUrl: pm.fromAvatar,
+              onOpenPm: () => {
               const partner =
                 rosterUsers.find((u) => u.username.toLowerCase() === pm.fromUsername.toLowerCase()) ||
                 allConnectedUsers.find((u) => u.username.toLowerCase() === pm.fromUsername.toLowerCase()) || {
@@ -2706,11 +2735,11 @@ export default function App() {
               setActiveDrawer('pm');
             }
           }).catch(() => {});
+          showToast(`رسالة خاصة جديدة من ${pm.fromUsername} 🔒`, 'info');
         }
-
-        showToast(`رسالة خاصة جديدة من ${pm.fromUsername} 🔒`, 'info');
       }
-    });
+    }
+  });
 
     s.on('monitoredWordsUpdated', (words: string[]) => {
       setMonitoredWordsList(words);
@@ -3167,12 +3196,13 @@ export default function App() {
     showToast('تم حذف المنشور من الحائط 🗑️', 'info');
   };
 
-  // Edit wall post
+  // Edit wall post (تعديل منشور الحائط مع توسيع الاختصارات)
   const handleSaveEditWallPost = (postId: string, newText: string) => {
     if (!newText.trim()) return;
-    socket?.emit('editWallPost', { postId, newText: newText.trim() });
+    const expanded = expandClientShortcuts(newText.trim(), shortcuts);
+    socket?.emit('editWallPost', { postId, newText: expanded });
     setWallPosts((prev) =>
-      prev.map((p) => (p.id === postId ? { ...p, text: newText.trim(), isEdited: true } : p))
+      prev.map((p) => (p.id === postId ? { ...p, text: expanded, isEdited: true } : p))
     );
     setEditingWallPostId(null);
     setEditingWallPostText('');
@@ -3196,10 +3226,11 @@ export default function App() {
     showToast('تم حذف التعليق بنجاح 🗑️', 'info');
   };
 
-  // Add comment on wall post
+  // Add comment on wall post (التعليق على منشور الحائط مع توسيع الاختصارات)
   const handleAddWallComment = (postId: string, text: string) => {
     if (!text.trim()) return;
-    socket?.emit('addWallComment', { postId, text: text.trim() });
+    const expanded = expandClientShortcuts(text.trim(), shortcuts);
+    socket?.emit('addWallComment', { postId, text: expanded });
     setWallCommentInput('');
   };
 
@@ -4132,7 +4163,8 @@ export default function App() {
       setWallUploadProgress(null);
 
       const defaultText = isVideo ? '🎥 مقطع فيديو جديد' : '📸 صورة جديدة';
-      const textToPost = wallTextInput.trim() || defaultText;
+      const rawText = wallTextInput.trim() || defaultText;
+      const textToPost = expandClientShortcuts(rawText, shortcuts);
 
       socket?.emit('newWallPost', {
         text: textToPost,
@@ -9304,6 +9336,22 @@ export default function App() {
                           <div className="text-[10px] text-slate-400 py-1 text-center">لا توجد تعليقات بعد .. كن أول من يعلق!</div>
                         )}
 
+                        {/* Comment Shortcut Preview Indicator */}
+                        {(() => {
+                          const matched = findMatchingShortcut(wallCommentInput, shortcuts);
+                          if (!matched) return null;
+                          return (
+                            <div className="px-2 py-0.5 bg-amber-50 text-[10px] text-amber-900 rounded flex items-center justify-between mb-1 border border-amber-200">
+                              <span className="font-bold flex items-center gap-1">
+                                <span>⚡ اختصار التعليق:</span>
+                                <span className="font-mono bg-amber-200 px-1 rounded">{matched.trigger}</span>
+                                <span>⬅️</span>
+                                <span className="truncate max-w-[140px]">{matched.replacement}</span>
+                              </span>
+                            </div>
+                          );
+                        })()}
+
                         {/* Add Comment Input */}
                         <div className="flex items-center gap-1.5 pt-1">
                           <textarea
@@ -9365,6 +9413,23 @@ export default function App() {
               </div>
             )}
 
+            {/* Wall Shortcut Preview Indicator */}
+            {(() => {
+              const matched = findMatchingShortcut(wallTextInput, shortcuts);
+              if (!matched) return null;
+              return (
+                <div className="px-3 py-1 bg-amber-50 border-t border-amber-200 text-[11px] text-amber-900 flex items-center justify-between">
+                  <span className="font-bold flex items-center gap-1">
+                    <span>⚡ اختصار مكتشف:</span>
+                    <span className="font-mono bg-amber-200/80 px-1.5 py-0.2 rounded text-[10px]">{matched.trigger}</span>
+                    <span>⬅️</span>
+                    <span className="text-amber-800 truncate max-w-[170px]">{matched.replacement}</span>
+                  </span>
+                  <span className="text-[10px] text-amber-600 font-semibold">(يُستبدل تلقائياً عند النشر)</span>
+                </div>
+              );
+            })()}
+
             {/* Quick reply bar at bottom with Video / Photo upload */}
             <div className="p-2 border-t bg-slate-50 flex items-center gap-1.5">
               <label className={`p-2 text-slate-500 hover:text-indigo-600 cursor-pointer rounded hover:bg-slate-100 flex-shrink-0 ${isWallUploading ? 'opacity-50 pointer-events-none' : ''}`} title="إرفاق فيديو أو صورة للمنشور">
@@ -9403,7 +9468,8 @@ export default function App() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && wallTextInput.trim()) {
                     e.preventDefault();
-                    socket?.emit('newWallPost', { text: wallTextInput.trim(), category: wallTab });
+                    const expanded = expandClientShortcuts(wallTextInput.trim(), shortcuts);
+                    socket?.emit('newWallPost', { text: expanded, category: wallTab });
                     setWallTextInput('');
                   }
                 }}
@@ -9413,7 +9479,8 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   if (wallTextInput.trim()) {
-                    socket?.emit('newWallPost', { text: wallTextInput.trim(), category: wallTab });
+                    const expanded = expandClientShortcuts(wallTextInput.trim(), shortcuts);
+                    socket?.emit('newWallPost', { text: expanded, category: wallTab });
                     setWallTextInput('');
                   }
                 }}
@@ -10128,7 +10195,12 @@ export default function App() {
                     </div>
                   )}
 
-                  {isPmRecordingVoice ? (
+                  {selectedPmUser?.isPmDisabled && currentUser?.role !== 'admin' && currentUser?.role !== 'super' ? (
+                    <div className="p-3 bg-rose-950/80 border border-rose-500/50 rounded-xl text-center text-xs text-rose-200 font-bold flex items-center justify-center gap-2 shadow-inner">
+                      <Lock className="w-4 h-4 text-rose-400 shrink-0" />
+                      <span>قام {selectedPmUser.username} بتعطيل استلام المحادثات الخاصة (الخاص مقفل 🔒)</span>
+                    </div>
+                  ) : isPmRecordingVoice ? (
                     <div className="flex items-center justify-center py-0.5">
                       <VoiceRecorder
                         onSendVoice={(voiceData) => {
@@ -10757,6 +10829,102 @@ export default function App() {
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>حذف صورتي الشخصية</span>
+                </button>
+              </div>
+
+              {/* 1. خيار تعطيل / تفعيل المحادثات الخاصة (قفل الخاص) */}
+              <div className="p-3 rounded-xl border-2 border-amber-500/70 bg-gradient-to-b from-[#1c150f] to-[#120d09] text-right space-y-2 shadow-md">
+                <div className="flex items-center justify-between border-b border-amber-500/30 pb-2">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-300 text-xs">
+                    {isPmDisabled ? <Lock className="w-4 h-4 text-rose-400" /> : <Unlock className="w-4 h-4 text-emerald-400" />}
+                    <span>المحادثات الخاصة (الخاص)</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1 ${
+                    isPmDisabled ? 'bg-rose-950 text-rose-300 border border-rose-500/50' : 'bg-emerald-950 text-emerald-300 border border-emerald-500/50'
+                  }`}>
+                    {isPmDisabled ? '🔒 معطل ومقفل' : '🔓 مفعّل ومتاح'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-100/80 leading-relaxed">
+                  {isPmDisabled
+                    ? 'المحادثات الخاصة لديك مقفلة حالياً. لن يتمكن أي عضو من إرسال رسائل خاصة إليك أو فتح محادثة جديدة معك.'
+                    : 'المحادثات الخاصة مفعّلة. يمكن لجميع الأعضاء التواصل معك ومراسلتك على الخاص بحرية.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextState = !isPmDisabled;
+                    setIsPmDisabled(nextState);
+                    if (currentUser) {
+                      setCurrentUser({ ...currentUser, isPmDisabled: nextState });
+                    }
+                    socket?.emit('updateProfile', { isPmDisabled: nextState });
+                    showToast(
+                      nextState
+                        ? '🔒 تم تعطيل وقفل استلام المحادثات الخاصة بنجاح.'
+                        : '🔓 تم تفعيل استلام المحادثات الخاصة بنجاح.',
+                      nextState ? 'info' : 'success'
+                    );
+                  }}
+                  className={`w-full py-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-98 ${
+                    isPmDisabled
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white'
+                      : 'bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white'
+                  }`}
+                >
+                  {isPmDisabled ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                  <span>{isPmDisabled ? 'تفعيل وفتح المحادثات الخاصة 🔓' : 'تعطيل وقفل المحادثات الخاصة 🔒'}</span>
+                </button>
+              </div>
+
+              {/* 2. خيار تعطيل التنبيهات بالكامل (كتم كافة الأصوات والإشعارات) */}
+              <div className="p-3 rounded-xl border-2 border-amber-500/70 bg-gradient-to-b from-[#1c150f] to-[#120d09] text-right space-y-2 shadow-md">
+                <div className="flex items-center justify-between border-b border-amber-500/30 pb-2">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-300 text-xs">
+                    {allNotificationsDisabled ? <BellOff className="w-4 h-4 text-rose-400" /> : <Bell className="w-4 h-4 text-amber-400" />}
+                    <span>التنبيهات والإشعارات العامة</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1 ${
+                    allNotificationsDisabled ? 'bg-rose-950 text-rose-300 border border-rose-500/50' : 'bg-emerald-950 text-emerald-300 border border-emerald-500/50'
+                  }`}>
+                    {allNotificationsDisabled ? '🔕 معطلة بالكامل' : '🔔 مفعلة'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-100/80 leading-relaxed">
+                  {allNotificationsDisabled
+                    ? 'كافة التنبيهات معطلة حالياً (كتم تام لأصوات الدردشة، إشعارات المتصفح المنبثقة، وتنبيهات المنشن والخاص).'
+                    : 'التنبيهات مفعلة وستصلك الأصوات وإشعارات المتصفح عند وصول رسائل أو منشن لك.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextState = !allNotificationsDisabled;
+                    setAllNotificationsDisabled(nextState);
+                    allNotificationsDisabledRef.current = nextState;
+                    try {
+                      if (nextState) {
+                        localStorage.setItem('soqoor_notifications_disabled', 'true');
+                      } else {
+                        localStorage.removeItem('soqoor_notifications_disabled');
+                      }
+                    } catch {}
+                    sounds.setMuted(nextState);
+                    setSoundsMuted(nextState);
+                    showToast(
+                      nextState
+                        ? '🔕 تم تعطيل كافة التنبيهات والأصوات والإشعارات بالكامل (صامت تام).'
+                        : '🔔 تم تفعيل التنبيهات والأصوات والإشعارات بنجاح.',
+                      nextState ? 'info' : 'success'
+                    );
+                  }}
+                  className={`w-full py-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-98 ${
+                    allNotificationsDisabled
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black'
+                      : 'bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white'
+                  }`}
+                >
+                  {allNotificationsDisabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+                  <span>{allNotificationsDisabled ? 'تفعيل وتشغيل التنبيهات 🔔' : 'تعطيل وإيقاف التنبيهات بالكامل 🔕'}</span>
                 </button>
               </div>
 

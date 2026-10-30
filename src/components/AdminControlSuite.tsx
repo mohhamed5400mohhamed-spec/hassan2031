@@ -84,6 +84,7 @@ export interface User {
   deviceFingerprint?: string;
   honorBadge?: string;
   nameBannerUrl?: string;
+  isPmDisabled?: boolean;
   isJailed?: boolean;
   joinedAt?: number;
 }

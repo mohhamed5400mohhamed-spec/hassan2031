@@ -336,6 +336,7 @@ export interface ConnectedUser {
   fontSize?: string;
   nameBannerUrl?: string; // رابط البنر / السوابر المصور للعضو بمقاس 500x50 كبديل لاسمه
   giftBadges?: string[]; // قائمة أيقونات الهدايا والأوسمة التكريمية بجانب الاسم
+  isPmDisabled?: boolean;
   isJailed?: boolean;
   joinedAt: number;
   sessionToken?: string;
@@ -1604,6 +1605,7 @@ export interface RegisteredMemberInfo {
   bubbleStyle?: string;
   nameBannerUrl?: string; // رابط البنر / السوابر المصور للعضو بمقاس 500x50
   giftBadges?: string[]; // قائمة أيقونات الهدايا والأوسمة التكريمية بجانب الاسم
+  isPmDisabled?: boolean;
   isJailed?: boolean;
   lastSeen?: number;
   visitors?: ProfileVisitorRecord[];
@@ -1674,6 +1676,7 @@ export function getAllRegisteredMembersPayload() {
       deviceInfo: onlineUser?.deviceInfo || m.deviceInfo || 'جهاز ذكي',
       deviceFingerprint: onlineUser?.deviceFingerprint || m.deviceFingerprint || 'FP-DEV-DEFAULT',
       isJailed: Boolean(m.isJailed || jailedUsernames.has(username.toLowerCase())),
+      isPmDisabled: Boolean(onlineUser?.isPmDisabled ?? m.isPmDisabled),
       isOnline: Boolean(onlineUser && presenceState !== 'offline'),
       presenceState,
       currentRoom: onlineUser ? onlineUser.room : 'خارج الغرف',
@@ -4221,6 +4224,7 @@ io.on('connection', (socket) => {
       fontSize: (reg as any)?.fontSize || undefined,
       nameBannerUrl: reg?.nameBannerUrl || undefined,
       giftBadges: reg?.giftBadges || undefined,
+      isPmDisabled: Boolean(reg?.isPmDisabled),
       engagement: reg?.engagement || getDefaultEngagement()
     };
 
@@ -5482,7 +5486,8 @@ io.on('connection', (socket) => {
       password,
       flag,
       nameColor,
-      textColor
+      textColor,
+      isPmDisabled
     }: {
       username?: string;
       statusQuote?: string;
@@ -5492,6 +5497,7 @@ io.on('connection', (socket) => {
       flag?: string;
       nameColor?: string;
       textColor?: string;
+      isPmDisabled?: boolean;
     }) => {
       const user = users.find((u) => u.id === socket.id);
       if (!user) return;
@@ -5518,6 +5524,7 @@ io.on('connection', (socket) => {
       if (nameBannerUrl !== undefined) user.nameBannerUrl = nameBannerUrl.trim() || undefined;
       if (nameColor !== undefined) user.nameColor = nameColor;
       if (textColor !== undefined) user.textColor = textColor;
+      if (isPmDisabled !== undefined) user.isPmDisabled = Boolean(isPmDisabled);
 
       // Update registered members persistent store
       if (!registeredMembers[user.username]) {
@@ -5528,6 +5535,7 @@ io.on('connection', (socket) => {
           statusQuote: user.statusQuote,
           avatarUrl: user.avatarUrl,
           nameBannerUrl: user.nameBannerUrl,
+          isPmDisabled: user.isPmDisabled,
           likes: user.likes || 0,
           points: user.points || 100,
           nameColor: user.nameColor,
@@ -5538,6 +5546,7 @@ io.on('connection', (socket) => {
         registeredMembers[user.username].statusQuote = user.statusQuote;
         if (avatarUrl !== undefined) registeredMembers[user.username].avatarUrl = avatarUrl;
         if (nameBannerUrl !== undefined) registeredMembers[user.username].nameBannerUrl = user.nameBannerUrl;
+        if (isPmDisabled !== undefined) registeredMembers[user.username].isPmDisabled = Boolean(isPmDisabled);
         if (user.flag) registeredMembers[user.username].flag = user.flag;
         if (nameColor !== undefined) (registeredMembers[user.username] as any).nameColor = nameColor;
         if (textColor !== undefined) (registeredMembers[user.username] as any).textColor = textColor;
@@ -5551,8 +5560,10 @@ io.on('connection', (socket) => {
         nameColor: user.nameColor,
         textColor: user.textColor,
         nameGradient: user.nameGradient,
-        profileBg: user.profileBg
+        profileBg: user.profileBg,
+        isPmDisabled: user.isPmDisabled
       });
+      io.emit('allRegisteredMembers', getAllRegisteredMembersPayload());
 
       // Broadcast update to all rooms and users
       chatRooms.forEach((r) => {
@@ -5637,6 +5648,7 @@ io.on('connection', (socket) => {
       }
 
       const assignedCategory: 'posts' | 'quick' = category || (cleanMediaUrl ? 'posts' : 'quick');
+      const expandedWallText = text ? expandShortcuts(sanitizeText(text)) : '';
 
       const newPost: WallPost = {
         id: `post-${Date.now()}`,
@@ -5644,7 +5656,7 @@ io.on('connection', (socket) => {
         avatarUrl: user.avatarUrl,
         nameBannerUrl: user.nameBannerUrl,
         flag: user.flag,
-        text: sanitizeText(text),
+        text: expandedWallText,
         mediaUrl: cleanMediaUrl,
         mediaType: cleanMediaType,
         category: assignedCategory,
@@ -5696,7 +5708,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Add Comment on Wall Post (التعليق على منشورات الحائط)
+  // Add Comment on Wall Post (التعليق على منشورات الحائط مع توسيع الاختصارات)
   socket.on('addWallComment', ({ postId, text }: { postId: string; text: string }) => {
     const user = users.find((u) => u.id === socket.id);
     if (!user || !text.trim()) return;
@@ -5704,13 +5716,14 @@ io.on('connection', (socket) => {
     if (post) {
       checkAndLogMonitoredWords(text, user, { type: 'wall_comment', targetName: `تعليق على منشور ${post.username}` });
 
+      const expandedCommentText = text ? expandShortcuts(sanitizeText(text)) : '';
       if (!post.comments) post.comments = [];
       const newComment: WallComment = {
         id: `cm-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         username: user.username,
         avatarUrl: user.avatarUrl,
         nameBannerUrl: user.nameBannerUrl,
-        text: sanitizeText(text),
+        text: expandedCommentText,
         time: getCurrentTimeString(),
         timestamp: Date.now()
       };
@@ -5741,14 +5754,14 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Edit Wall Post (تعديل منشور الحائط)
+  // Edit Wall Post (تعديل منشور الحائط مع توسيع الاختصارات)
   socket.on('editWallPost', ({ postId, newText }: { postId: string; newText: string }) => {
     const user = users.find((u) => u.id === socket.id);
     if (!user || !newText?.trim()) return;
     const post = wallPosts.find((p) => p.id === postId);
     if (post) {
       if (post.username.toLowerCase() === user.username.toLowerCase() || user.role === 'admin' || user.role === 'super') {
-        const cleanText = sanitizeText(newText.trim());
+        const cleanText = newText ? expandShortcuts(sanitizeText(newText.trim())) : '';
         post.text = cleanText;
         post.isEdited = true;
         saveWallPosts();
@@ -6168,6 +6181,13 @@ io.on('connection', (socket) => {
         const destUsername = recipient ? recipient.username : (toUsername ? toUsername.trim() : '');
         if (!destUsername) return;
 
+        const targetMemberInfo = registeredMembers[destUsername];
+        const isRecipientPmDisabled = recipient ? Boolean(recipient.isPmDisabled) : Boolean(targetMemberInfo?.isPmDisabled);
+        if (isRecipientPmDisabled && sender && sender.role !== 'admin' && sender.role !== 'super') {
+          socket.emit('systemAlert', `عفواً، قام [${destUsername}] بتعطيل استلام المحادثات الخاصة 🔒`);
+          return;
+        }
+
         if (clean) {
           checkAndLogMonitoredWords(clean, sender, { type: 'pm', targetName: destUsername });
         }
@@ -6185,7 +6205,6 @@ io.on('connection', (socket) => {
           };
         }
 
-        const targetMemberInfo = registeredMembers[destUsername];
         const destBanner = recipient?.nameBannerUrl || targetMemberInfo?.nameBannerUrl;
 
         const pm: PrivateMessage = {

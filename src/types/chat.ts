@@ -33,6 +33,7 @@ export interface User {
   fontFamily?: string;
   wallpaper?: string;
   bubbleStyle?: string;
+  isPmDisabled?: boolean;
   engagement?: MemberEngagement;
 }
 
