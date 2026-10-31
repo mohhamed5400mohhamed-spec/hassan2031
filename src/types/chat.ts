@@ -148,6 +148,17 @@ export interface RoomLiveBroadcastState {
   viewersCount: number;
 }
 
+export interface YouTubeVideoInfo {
+  id: string;
+  title: string;
+  thumbnail?: string;
+  channelTitle?: string;
+  duration?: string;
+  views?: string;
+  uploadedAt?: string;
+  url?: string;
+}
+
 export interface WallPost {
   id: string;
   username: string;
@@ -158,6 +169,7 @@ export interface WallPost {
   mediaUrl?: string;
   mediaType?: 'image' | 'video';
   category?: 'posts' | 'quick';
+  youtubeVideo?: YouTubeVideoInfo;
   time: string;
   likes: number;
   commentsCount: number;

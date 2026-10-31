@@ -169,6 +169,15 @@ import type {
   MonitorEvent
 } from './types/chat';
 
+import {
+  extractYouTubeVideoId,
+  getYouTubeEmbedUrl,
+  getYouTubeThumbnailUrl,
+  getYouTubeWatchUrl,
+  cleanYouTubeUrlFromText,
+  type YouTubeVideoInfo
+} from './utils/youtube';
+
 export type {
   User,
   MemberEngagement,
@@ -706,6 +715,14 @@ export default function App() {
   const [wallMediaUrl, setWallMediaUrl] = useState('');
   const [isWallUploading, setIsWallUploading] = useState(false);
   const [wallUploadProgress, setWallUploadProgress] = useState<number | null>(null);
+
+  // YouTube in Wall State (البحث والمشاركة والتشغيل المباشر لفيديوهات يوتيوب بالحائط)
+  const [showYouTubeSearchModal, setShowYouTubeSearchModal] = useState(false);
+  const [ytSearchQuery, setYtSearchQuery] = useState('');
+  const [ytSearchResults, setYtSearchResults] = useState<YouTubeVideoInfo[]>([]);
+  const [isYtSearching, setIsYtSearching] = useState(false);
+  const [ytSearchError, setYtSearchError] = useState<string | null>(null);
+  const [playingYouTubePostId, setPlayingYouTubePostId] = useState<string | null>(null);
 
   // Private Messages State - Preserved in sessionStorage for this browser tab session;
   // Automatically wiped by the browser when the tab/browser is closed permanently,
@@ -4340,6 +4357,83 @@ export default function App() {
     } finally {
       e.target.value = '';
     }
+  };
+
+  // YouTube Search for Wall (البحث في يوتيوب ومشاركة الفيديو في الحائط)
+  const handleSearchYouTube = async (queryToSearch?: string) => {
+    const q = (typeof queryToSearch === 'string' ? queryToSearch : ytSearchQuery).trim();
+    if (!q) {
+      setYtSearchError('يرجى كتابة كلمة للبحث عنها في يوتيوب 🔍');
+      return;
+    }
+
+    setIsYtSearching(true);
+    setYtSearchError(null);
+
+    try {
+      const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(q)}`);
+      if (!res.ok) {
+        throw new Error(`خطأ في استجابة الخادم (${res.status})`);
+      }
+      const data = await res.json();
+      if (data.results && Array.isArray(data.results)) {
+        setYtSearchResults(data.results);
+        if (data.results.length === 0) {
+          setYtSearchError('لم يتم العثور على أي نتائج، جرب كلمات بحث أخرى.');
+        }
+      } else {
+        setYtSearchResults([]);
+        setYtSearchError('لم يتم العثور على نتائج.');
+      }
+    } catch (err: any) {
+      console.error('YouTube search error:', err);
+      setYtSearchError('تعذر البحث في يوتيوب حالياً. تحقق من الاتصال أو أعد المحاولة.');
+    } finally {
+      setIsYtSearching(false);
+    }
+  };
+
+  // Post YouTube Video directly to Wall
+  const handlePostYouTubeVideo = (video: YouTubeVideoInfo) => {
+    if (!currentUser) {
+      showToast('يجب تسجيل الدخول أولاً للنشر على الحائط 🔐', 'error');
+      return;
+    }
+    const note = wallTextInput.trim();
+    socket?.emit('newWallPost', {
+      text: note ? expandClientShortcuts(note, shortcuts) : video.title,
+      category: wallTab,
+      youtubeVideo: video
+    });
+    setWallTextInput('');
+    setShowYouTubeSearchModal(false);
+    showToast(`تم نشر فيديو يوتيوب "${video.title.slice(0, 30)}..." على الحائط 🎬✨`, 'success');
+  };
+
+  // General Wall Post Sender (Handles text, shortcuts, and auto-detects pasted YouTube links)
+  const handleSendWallPost = () => {
+    if (!wallTextInput.trim()) return;
+    if (!currentUser) {
+      showToast('يجب تسجيل الدخول أولاً للنشر على الحائط 🔐', 'error');
+      return;
+    }
+    const expanded = expandClientShortcuts(wallTextInput.trim(), shortcuts);
+    const ytId = extractYouTubeVideoId(expanded);
+    const ytData: YouTubeVideoInfo | undefined = ytId
+      ? {
+          id: ytId,
+          title: 'فيديو يوتيوب',
+          thumbnail: getYouTubeThumbnailUrl(ytId),
+          url: getYouTubeWatchUrl(ytId)
+        }
+      : undefined;
+
+    socket?.emit('newWallPost', {
+      text: expanded,
+      category: wallTab,
+      youtubeVideo: ytData
+    });
+    setWallTextInput('');
   };
 
   // 24-Hour Story File Selection & Upload (نظام حالات/خواطر الصور والفيديو)
@@ -9355,12 +9449,117 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="text-xs text-slate-800 leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] break-words" dir="auto">
-                        {renderFormattedMessageText(post.text)}
+                        {renderFormattedMessageText(
+                          (post.youtubeVideo || extractYouTubeVideoId(post.text))
+                            ? (cleanYouTubeUrlFromText(post.text) || post.youtubeVideo?.title || '')
+                            : post.text
+                        )}
                         {post.isEdited && (
                           <span className="text-[10px] text-blue-600 bg-blue-50 px-1 py-0.5 rounded font-bold mr-1.5 select-none">(معدل ✏️)</span>
                         )}
                       </div>
                     )}
+
+                    {/* YouTube Video Player / Embed or Interactive Card */}
+                    {(() => {
+                      const ytId = post.youtubeVideo?.id || extractYouTubeVideoId(post.text);
+                      if (!ytId) return null;
+                      const ytData: YouTubeVideoInfo = post.youtubeVideo || {
+                        id: ytId,
+                        title: 'فيديو يوتيوب',
+                        thumbnail: getYouTubeThumbnailUrl(ytId),
+                        url: getYouTubeWatchUrl(ytId)
+                      };
+                      const isPlaying = playingYouTubePostId === post.id;
+
+                      return (
+                        <div className="mt-2.5 rounded-xl overflow-hidden border border-red-500/40 bg-slate-950 shadow-md text-right">
+                          {isPlaying ? (
+                            <div className="relative w-full aspect-video bg-black flex flex-col">
+                              <iframe
+                                src={getYouTubeEmbedUrl(ytId, true)}
+                                title={ytData.title || 'YouTube video player'}
+                                className="w-full flex-1 border-0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowFullScreen
+                              />
+                              <div className="p-2 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-200">
+                                <div className="truncate font-bold text-amber-300 max-w-[190px] sm:max-w-[280px]">
+                                  {ytData.title}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <a
+                                    href={ytData.url || getYouTubeWatchUrl(ytId)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[10px] text-red-400 hover:text-red-300 hover:underline flex items-center gap-1 font-semibold"
+                                    title="فتح المقطع في موقع يوتيوب"
+                                  >
+                                    <span>يوتيوب</span>
+                                    <span>↗</span>
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPlayingYouTubePostId(null)}
+                                    className="text-[11px] bg-red-600 hover:bg-red-700 text-white px-2 py-0.5 rounded font-bold cursor-pointer transition-colors"
+                                    title="إغلاق المشغل"
+                                  >
+                                    إغلاق ✕
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => setPlayingYouTubePostId(post.id)}
+                              className="relative group cursor-pointer overflow-hidden"
+                              title="انقر لتشغيل الفيديو فوراً داخل الحائط ▶"
+                            >
+                              <div className="relative aspect-video w-full bg-slate-900 flex items-center justify-center overflow-hidden">
+                                <img
+                                  src={ytData.thumbnail || getYouTubeThumbnailUrl(ytId)}
+                                  alt={ytData.title}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  loading="lazy"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/35 group-hover:from-black/70 transition-colors flex items-center justify-center">
+                                  {/* Red YouTube Play Button with hover pulse */}
+                                  <div className="w-14 h-14 rounded-full bg-red-600/90 group-hover:bg-red-600 flex items-center justify-center text-white shadow-2xl group-hover:scale-115 transition-all duration-200 border-2 border-white/50">
+                                    <Play className="w-7 h-7 fill-white ml-1" />
+                                  </div>
+                                </div>
+                                {/* Top YouTube Branding Badge */}
+                                <div className="absolute top-2 right-2 bg-red-600/95 text-white font-bold text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md">
+                                  <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                                  </svg>
+                                  <span>YouTube</span>
+                                </div>
+                                {/* Duration badge */}
+                                {ytData.duration && (
+                                  <div className="absolute bottom-2 left-2 bg-black/85 text-white text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-white/20">
+                                    {ytData.duration}
+                                  </div>
+                                )}
+                              </div>
+                              {/* Bottom Video Details */}
+                              <div className="p-2.5 bg-slate-900 border-t border-slate-800 text-white">
+                                <div className="font-bold text-xs line-clamp-2 text-slate-100 group-hover:text-red-400 transition-colors">
+                                  {ytData.title}
+                                </div>
+                                <div className="flex items-center justify-between mt-1.5 text-[11px] text-slate-400">
+                                  <span className="truncate max-w-[160px] sm:max-w-[220px]">{ytData.channelTitle || 'قناة يوتيوب'}</span>
+                                  <span className="text-red-400 font-bold flex items-center gap-1 group-hover:translate-x-[-3px] transition-transform shrink-0">
+                                    <span>تشغيل الآن</span>
+                                    <span>▶</span>
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Media in Wall Post with click to Lightbox */}
                     {post.mediaUrl && (
@@ -9626,9 +9825,7 @@ export default function App() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && wallTextInput.trim()) {
                     e.preventDefault();
-                    const expanded = expandClientShortcuts(wallTextInput.trim(), shortcuts);
-                    socket?.emit('newWallPost', { text: expanded, category: wallTab });
-                    setWallTextInput('');
+                    handleSendWallPost();
                   }
                 }}
                 className="flex-1 p-2 text-xs border rounded bg-white outline-none resize-none h-9 leading-tight font-medium overflow-hidden"
@@ -9636,17 +9833,229 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
-                  if (wallTextInput.trim()) {
-                    const expanded = expandClientShortcuts(wallTextInput.trim(), shortcuts);
-                    socket?.emit('newWallPost', { text: expanded, category: wallTab });
-                    setWallTextInput('');
+                  setShowYouTubeSearchModal(true);
+                  setYtSearchError(null);
+                  if (ytSearchResults.length === 0) {
+                    handleSearchYouTube('شيلات');
                   }
                 }}
-                className="px-3 py-2 bg-[#2a241e] text-amber-200 rounded text-xs font-bold cursor-pointer"
+                className="px-2.5 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded text-xs font-bold cursor-pointer flex items-center gap-1 shadow-sm transition-all active:scale-95 shrink-0"
+                title="بحث ومشاركة فيديو من يوتيوب على الحائط 🎬"
+              >
+                <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+                <span className="hidden sm:inline">يوتيوب</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSendWallPost}
+                className="px-3.5 py-2 bg-[#2a241e] text-amber-200 rounded text-xs font-bold cursor-pointer transition-colors hover:bg-black shrink-0"
               >
                 إرسال
               </button>
             </div>
+
+            {/* YouTube Search Modal for Wall (نافذة البحث في يوتيوب واختيار فيديو للنشر بالحائط) */}
+            {showYouTubeSearchModal && (
+              <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 text-right animate-in fade-in duration-200" dir="rtl">
+                <div
+                  className="bg-slate-900 border border-red-500/30 text-white rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Modal Header */}
+                  <div className="px-4 py-3 bg-gradient-to-r from-red-950 via-slate-900 to-slate-900 border-b border-red-900/50 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white shadow-md">
+                        <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="font-black text-sm text-slate-100 flex items-center gap-1.5">
+                          <span>بحث فيديوهات يوتيوب</span>
+                          <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-1.5 py-0.2 rounded-full font-mono">YouTube</span>
+                        </h3>
+                        <p className="text-[11px] text-slate-400">ابحث عن أي مقطع أو شيلة وانشرها مباشرة على الحائط</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowYouTubeSearchModal(false)}
+                      className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Search Input Bar */}
+                  <div className="p-3 border-b border-slate-800 bg-slate-900/80 space-y-2 shrink-0">
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSearchYouTube();
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          placeholder="اكتب اسم الفيديو، الشيلة، الأغنية، أو القناة..."
+                          value={ytSearchQuery}
+                          onChange={(e) => setYtSearchQuery(e.target.value)}
+                          className="w-full pl-8 pr-3 py-2 bg-slate-950 border border-slate-700 focus:border-red-500 text-xs text-white rounded-xl outline-none placeholder:text-slate-500 font-medium"
+                          autoFocus
+                        />
+                        {ytSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setYtSearchQuery('')}
+                            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={isYtSearching}
+                        className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 disabled:opacity-60 text-white font-bold text-xs rounded-xl shadow cursor-pointer flex items-center gap-1.5 transition-all shrink-0"
+                      >
+                        {isYtSearching ? (
+                          <>
+                            <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>جارٍ البحث...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Search className="w-3.5 h-3.5" />
+                            <span>بحث</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+
+                    {/* Quick suggested search tags */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] text-slate-300">
+                      <span className="text-[10px] text-slate-400 shrink-0">مقترحات:</span>
+                      {[
+                        'شيلات حماسية',
+                        'أغاني طرب',
+                        'تلاوة خاشعة',
+                        'قصائد شعرية',
+                        'بودكاست',
+                        'طبيعة واسترخاء'
+                      ].map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => {
+                            setYtSearchQuery(tag);
+                            handleSearchYouTube(tag);
+                          }}
+                          className="px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white shrink-0 cursor-pointer text-[10px] transition-colors"
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Results List or Loading/Error State */}
+                  <div className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[220px]">
+                    {isYtSearching ? (
+                      <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+                        <RotateCw className="w-8 h-8 animate-spin text-red-500" />
+                        <span className="text-xs font-bold text-slate-300">جارٍ البحث في يوتيوب... ⏳</span>
+                      </div>
+                    ) : ytSearchError ? (
+                      <div className="py-8 px-4 text-center space-y-2 bg-red-950/20 border border-red-900/40 rounded-xl my-4">
+                        <AlertCircle className="w-8 h-8 text-red-400 mx-auto" />
+                        <div className="text-xs text-red-300 font-bold">{ytSearchError}</div>
+                      </div>
+                    ) : ytSearchResults.length === 0 ? (
+                      <div className="py-12 text-center text-slate-400 space-y-2">
+                        <div className="text-3xl">🔍</div>
+                        <div className="text-xs font-bold text-slate-300">ابحث عن أي فيديو في يوتيوب للبدء</div>
+                        <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                          ستظهر النتائج هنا مع إمكانية نشر الفيديو مباشرة على الحائط لجميع الأعضاء
+                        </p>
+                      </div>
+                    ) : (
+                      ytSearchResults.map((video) => (
+                        <div
+                          key={video.id}
+                          className="p-2.5 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3 transition-colors shadow-xs"
+                        >
+                          {/* Thumbnail with duration */}
+                          <div className="relative w-full sm:w-36 aspect-video rounded-lg overflow-hidden bg-black shrink-0 border border-slate-700">
+                            <img
+                              src={video.thumbnail || getYouTubeThumbnailUrl(video.id)}
+                              alt={video.title}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                            {video.duration && (
+                              <span className="absolute bottom-1 left-1 bg-black/85 text-white text-[9px] font-mono px-1 rounded">
+                                {video.duration}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Info & Title */}
+                          <div className="flex-1 min-w-0 w-full">
+                            <h4 className="text-xs font-bold text-slate-100 line-clamp-2 leading-relaxed" title={video.title}>
+                              {video.title}
+                            </h4>
+                            <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
+                              <span className="truncate max-w-[150px]">{video.channelTitle || 'قناة يوتيوب'}</span>
+                              {video.views && <span>• {video.views}</span>}
+                              {video.uploadedAt && <span>• {video.uploadedAt}</span>}
+                            </div>
+
+                            {/* Actions bar for each video */}
+                            <div className="mt-2.5 flex items-center justify-between sm:justify-end gap-2">
+                              <a
+                                href={video.url || getYouTubeWatchUrl(video.id)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2.5 py-1 text-[11px] text-slate-300 hover:text-white bg-slate-700/60 hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1 font-medium"
+                              >
+                                <span>معاينة</span>
+                                <span>↗</span>
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handlePostYouTubeVideo(video)}
+                                className="px-3.5 py-1 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                              >
+                                <span>نشر على الحائط</span>
+                                <span>🚀</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Direct Paste Tip Footer */}
+                  <div className="p-2.5 bg-slate-950 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between shrink-0">
+                    <span className="flex items-center gap-1.5">
+                      <span>💡</span>
+                      <span>يمكنك أيضاً نسخ رابط أي فيديو ولصقه مباشرة في خانة المنشور وسيتحول لفيديو تلقائياً!</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowYouTubeSearchModal(false)}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                    >
+                      إغلاق
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

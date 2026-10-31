@@ -18,6 +18,7 @@ import type {
   EmblemsConfig,
   EmojiSizeSetting
 } from './src/utils/emblemsSystem.ts';
+import { extractYouTubeVideoId } from './src/utils/youtube.ts';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -116,6 +117,126 @@ app.get('/api/system/storage-status', (_req, res) => {
       bucket: storageManager.getConfig().bucket || 'uploads'
     }
   });
+});
+
+// YouTube Search API Endpoint (البحث المباشر في يوتيوب عبر واجهة InnerTube الرسمية بدون أخطاء الترويسات)
+app.get('/api/youtube-search', async (req, res) => {
+  const query = (req.query.q as string)?.trim();
+  if (!query) {
+    return res.status(400).json({ success: false, results: [], error: 'يرجى إدخال كلمة البحث' });
+  }
+
+  try {
+    // Primary Engine: YouTube InnerTube API (JSON-only, no cookie header overflow, high speed)
+    const ytResponse = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20240201.00.00',
+            hl: 'ar',
+            gl: 'SA'
+          }
+        },
+        query
+      })
+    });
+
+    if (ytResponse.ok) {
+      const data = (await ytResponse.json()) as any;
+      const sections = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+      const formatted: Array<{
+        id: string;
+        title: string;
+        thumbnail: string;
+        duration: string;
+        channelTitle: string;
+        views: string;
+        uploadedAt: string;
+        url: string;
+      }> = [];
+
+      for (const sec of sections) {
+        const items = sec.itemSectionRenderer?.contents || [];
+        for (const item of items) {
+          if (item.videoRenderer) {
+            const v = item.videoRenderer;
+            const videoId = v.videoId;
+            if (videoId && typeof videoId === 'string') {
+              const title =
+                v.title?.runs?.map((r: any) => r.text).join('') ||
+                v.title?.simpleText ||
+                query;
+              const thumbnail =
+                v.thumbnail?.thumbnails?.slice(-1)[0]?.url ||
+                `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+              const duration = v.lengthText?.simpleText || '';
+              const channelTitle =
+                v.ownerText?.runs?.map((r: any) => r.text).join('') ||
+                'قناة يوتيوب';
+              const views =
+                v.viewCountText?.simpleText ||
+                (v.viewCountText?.runs ? v.viewCountText.runs.map((r: any) => r.text).join('') : '');
+              const uploadedAt = v.publishedTimeText?.simpleText || '';
+
+              formatted.push({
+                id: videoId,
+                title,
+                thumbnail,
+                duration,
+                channelTitle,
+                views,
+                uploadedAt,
+                url: `https://www.youtube.com/watch?v=${videoId}`
+              });
+            }
+          }
+        }
+      }
+
+      if (formatted.length > 0) {
+        return res.json({ success: true, results: formatted.slice(0, 25) });
+      }
+    }
+
+    // Fallback Engine: Invidious public mirror
+    const invidiousRes = await fetch(`https://inv.tux.pizza/api/v1/search?q=${encodeURIComponent(query)}&type=video`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (invidiousRes.ok) {
+      const invData = (await invidiousRes.json()) as any[];
+      if (Array.isArray(invData) && invData.length > 0) {
+        const invResults = invData.slice(0, 20).map((v) => ({
+          id: v.videoId || '',
+          title: v.title || query,
+          thumbnail: v.videoThumbnails?.[0]?.url || `https://img.youtube.com/vi/${v.videoId}/hqdefault.jpg`,
+          duration: v.lengthSeconds ? `${Math.floor(v.lengthSeconds / 60)}:${String(v.lengthSeconds % 60).padStart(2, '0')}` : '',
+          channelTitle: v.author || 'قناة يوتيوب',
+          views: v.viewCount ? `${v.viewCount.toLocaleString()} مشاهدة` : '',
+          uploadedAt: v.publishedText || '',
+          url: `https://www.youtube.com/watch?v=${v.videoId}`
+        })).filter(v => Boolean(v.id));
+
+        if (invResults.length > 0) {
+          return res.json({ success: true, results: invResults });
+        }
+      }
+    }
+
+    return res.json({ success: true, results: [] });
+  } catch (err: any) {
+    console.error('[YouTube Search] Search error handled safely:', err?.message);
+    return res.json({
+      success: true,
+      results: [],
+      warning: 'تعذر الاتصال بخدمة البحث مؤقتاً، يمكنك لصق رابط الفيديو مباشرة في الحائط.'
+    });
+  }
 });
 
 // HTTP Media Upload Endpoint: Bypasses WebSocket frames to prevent socket freeze/disconnect
@@ -532,6 +653,16 @@ export interface WallPost {
   mediaUrl?: string;
   mediaType?: 'image' | 'video';
   category?: 'posts' | 'quick'; // تبويب الحائط: المنشورات أو الدردشة السريعة
+  youtubeVideo?: {
+    id: string;
+    title: string;
+    thumbnail?: string;
+    channelTitle?: string;
+    duration?: string;
+    views?: string;
+    uploadedAt?: string;
+    url?: string;
+  };
   time: string;
   likes: number;
   likedUsers?: string[];
@@ -5607,22 +5738,45 @@ io.on('connection', (socket) => {
       text,
       mediaUrl,
       mediaType,
-      category
+      category,
+      youtubeVideo
     }: {
       text: string;
       mediaUrl?: string;
       mediaType?: 'image' | 'video';
       category?: 'posts' | 'quick';
+      youtubeVideo?: {
+        id: string;
+        title: string;
+        thumbnail?: string;
+        channelTitle?: string;
+        duration?: string;
+        url?: string;
+      };
     }) => {
       const user = users.find((u) => u.id === socket.id);
-      if (!user || (!text?.trim() && !mediaUrl)) return;
+      let resolvedYoutubeVideo = youtubeVideo;
+      if (!resolvedYoutubeVideo && text) {
+        const extractedId = extractYouTubeVideoId(text);
+        if (extractedId) {
+          resolvedYoutubeVideo = {
+            id: extractedId,
+            title: 'فيديو يوتيوب',
+            thumbnail: `https://img.youtube.com/vi/${extractedId}/hqdefault.jpg`,
+            channelTitle: 'YouTube',
+            url: `https://www.youtube.com/watch?v=${extractedId}`
+          };
+        }
+      }
+
+      if (!user || (!text?.trim() && !mediaUrl && !resolvedYoutubeVideo)) return;
 
       if (user.role !== 'admin' && user.role !== 'super') {
-        if (mediaUrl && likesSettings.wallMediaLikes > 0 && user.likes < likesSettings.wallMediaLikes) {
+        if ((mediaUrl || resolvedYoutubeVideo) && likesSettings.wallMediaLikes > 0 && user.likes < likesSettings.wallMediaLikes) {
           socket.emit('systemAlert', `عفواً، يتطلب نشر وسائط في الحائط ${likesSettings.wallMediaLikes} لايك على الأقل. رصيدك الحالي: ${user.likes} 👍`);
           return;
         }
-        if (!mediaUrl && text && likesSettings.wallTextLikes > 0 && user.likes < likesSettings.wallTextLikes) {
+        if (!mediaUrl && !resolvedYoutubeVideo && text && likesSettings.wallTextLikes > 0 && user.likes < likesSettings.wallTextLikes) {
           socket.emit('systemAlert', `عفواً، يتطلب النشر في الحائط ${likesSettings.wallTextLikes} لايك على الأقل. رصيدك الحالي: ${user.likes} 👍`);
           return;
         }
@@ -5668,7 +5822,7 @@ io.on('connection', (socket) => {
         cleanMediaType = (cleanMediaUrl.endsWith('.mp4') || cleanMediaUrl.endsWith('.webm') || cleanMediaUrl.endsWith('.mov')) ? 'video' : 'image';
       }
 
-      const assignedCategory: 'posts' | 'quick' = category || (cleanMediaUrl ? 'posts' : 'quick');
+      const assignedCategory: 'posts' | 'quick' = category || (cleanMediaUrl || resolvedYoutubeVideo ? 'posts' : 'quick');
       const expandedWallText = text ? expandShortcuts(sanitizeText(text)) : '';
 
       const newPost: WallPost = {
@@ -5681,6 +5835,7 @@ io.on('connection', (socket) => {
         mediaUrl: cleanMediaUrl,
         mediaType: cleanMediaType,
         category: assignedCategory,
+        youtubeVideo: resolvedYoutubeVideo,
         time: getCurrentTimeString(),
         likes: 0,
         commentsCount: 0,

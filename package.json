@@ -28,7 +28,8 @@
     "socket.io": "^4.8.4",
     "socket.io-client": "^4.8.4",
     "tsx": "^4.21.0",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "youtube-sr": "^4.3.12"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
