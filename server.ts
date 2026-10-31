@@ -4413,6 +4413,27 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Private message typing indicator event (بث حالة الكتابة الآن في الخاص للطرف الآخر)
+  socket.on('pmTyping', ({ toId, toUsername, isTyping }: { toId?: string; toUsername?: string; isTyping: boolean }) => {
+    const user = users.find((u) => u.id === socket.id);
+    if (!user) return;
+
+    let recipient = users.find((u) => u.id === toId);
+    if (!recipient && toUsername) {
+      recipient = users.find((u) => u.username.toLowerCase() === toUsername.trim().toLowerCase());
+    }
+    if (recipient) {
+      io.to(recipient.id).emit('userPmTyping', {
+        fromUserId: user.id,
+        fromUsername: user.username,
+        avatarUrl: user.avatarUrl,
+        nameBannerUrl: user.nameBannerUrl,
+        isTyping: Boolean(isTyping),
+        timestamp: Date.now()
+      });
+    }
+  });
+
   // Chat message event (Supports text + mediaUrl + voiceNote + replyTo)
   socket.on(
     'chatMessage',

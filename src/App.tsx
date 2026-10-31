@@ -488,6 +488,66 @@ export default function App() {
     };
   }, []);
 
+  // Private Message typing indicators map: username (lower) -> { username, avatarUrl, nameBannerUrl, lastTypedAt }
+  const [pmTypingUsers, setPmTypingUsers] = useState<Record<string, { username: string; avatarUrl?: string; nameBannerUrl?: string; lastTypedAt: number }>>({});
+  const pmTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isSelfPmTypingRef = useRef<boolean>(false);
+
+  // Broadcast typing status to current PM partner (إرسال إشعار جاري الكتابة في الخاص)
+  const notifyPmTyping = (isTyping: boolean) => {
+    if (!socket || !selectedPmUser) return;
+    if (isTyping) {
+      if (!isSelfPmTypingRef.current) {
+        isSelfPmTypingRef.current = true;
+        socket.emit('pmTyping', { toId: selectedPmUser.id, toUsername: selectedPmUser.username, isTyping: true });
+      }
+      if (pmTypingTimeoutRef.current) {
+        clearTimeout(pmTypingTimeoutRef.current);
+      }
+      pmTypingTimeoutRef.current = setTimeout(() => {
+        isSelfPmTypingRef.current = false;
+        socket.emit('pmTyping', { toId: selectedPmUser.id, toUsername: selectedPmUser.username, isTyping: false });
+      }, 3000);
+    } else {
+      if (isSelfPmTypingRef.current) {
+        isSelfPmTypingRef.current = false;
+        if (pmTypingTimeoutRef.current) {
+          clearTimeout(pmTypingTimeoutRef.current);
+          pmTypingTimeoutRef.current = null;
+        }
+        socket.emit('pmTyping', { toId: selectedPmUser.id, toUsername: selectedPmUser.username, isTyping: false });
+      }
+    }
+  };
+
+  // Auto prune stale PM typing indicators
+  useEffect(() => {
+    const keys = Object.keys(pmTypingUsers);
+    if (keys.length === 0) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setPmTypingUsers((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const k of Object.keys(next)) {
+          if (now - next[k].lastTypedAt >= 4000) {
+            delete next[k];
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [pmTypingUsers]);
+
+  // Mobile Back Button accidental exit prevention modal (تأكيد مغادرة الشات عند الضغط على زر رجوع الهاتف)
+  const [showExitConfirmModal, setShowExitConfirmModal] = useState<boolean>(false);
+  const showExitConfirmModalRef = useRef<boolean>(showExitConfirmModal);
+  useEffect(() => {
+    showExitConfirmModalRef.current = showExitConfirmModal;
+  }, [showExitConfirmModal]);
+
   const [micSlots, setMicSlots] = useState<MicSlot[]>([
     { slotNumber: 1, user: null },
     { slotNumber: 2, user: null },
@@ -626,6 +686,10 @@ export default function App() {
   // 24-Hour Stories / Khwater States (نظام الخواطر والحالات 24 ساعة)
   const [storiesList, setStoriesList] = useState<StoryItem[]>([]);
   const [activeStoryViewer, setActiveStoryViewer] = useState<StoryItem | null>(null);
+  const activeStoryViewerRef = useRef<StoryItem | null>(activeStoryViewer);
+  useEffect(() => {
+    activeStoryViewerRef.current = activeStoryViewer;
+  }, [activeStoryViewer]);
   const [isCreatingStory, setIsCreatingStory] = useState(false);
   const [storyMediaUrl, setStoryMediaUrl] = useState('');
   const [storyMediaType, setStoryMediaType] = useState<'image' | 'video'>('image');
@@ -1117,6 +1181,10 @@ export default function App() {
 
   // Selected Profile for Viewing / Moderation (Screenshots 10 & 11)
   const [profileTargetUser, setProfileTargetUser] = useState<User | null>(null);
+  const profileTargetUserRef = useRef<User | null>(profileTargetUser);
+  useEffect(() => {
+    profileTargetUserRef.current = profileTargetUser;
+  }, [profileTargetUser]);
   const [profileEditName, setProfileEditName] = useState('');
   const [profileEditLikes, setProfileEditLikes] = useState('');
   const [profileEditQuote, setProfileEditQuote] = useState('');
@@ -1527,6 +1595,70 @@ export default function App() {
       window.removeEventListener('orientationchange', handleViewportChange);
     };
   }, []);
+
+  // Mobile Back Button accidental exit interceptor (تأكيد مغادرة الشات وإغلاق النوافذ عند الضغط على زر الرجوع بالهاتف)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    try {
+      if (!window.history.state || window.history.state.app !== 'chat') {
+        window.history.pushState({ app: 'chat', screen: 'main' }, '');
+      }
+    } catch {}
+
+    const handlePopState = () => {
+      // 1. If the Exit Confirmation modal is open, back button simply dismisses it
+      if (showExitConfirmModalRef.current) {
+        setShowExitConfirmModal(false);
+        try { window.history.pushState({ app: 'chat', screen: 'main' }, ''); } catch {}
+        return;
+      }
+
+      // 2. If any side drawer (users, rooms, pm, wall, settings, monitor, profile) is open, close it first
+      if (activeDrawerRef.current !== 'none') {
+        setActiveDrawer('none');
+        try { window.history.pushState({ app: 'chat', screen: 'main' }, ''); } catch {}
+        return;
+      }
+
+      // 3. If member profile modal is open, close it
+      if (profileTargetUserRef.current) {
+        setProfileTargetUser(null);
+        try { window.history.pushState({ app: 'chat', screen: 'main' }, ''); } catch {}
+        return;
+      }
+
+      // 4. If story viewer is open, close it
+      if (activeStoryViewerRef.current) {
+        setActiveStoryViewer(null);
+        try { window.history.pushState({ app: 'chat', screen: 'main' }, ''); } catch {}
+        return;
+      }
+
+      // 5. User is at chat root: prevent accidental exit from the chat, maintain state, and ask confirmation!
+      try { window.history.pushState({ app: 'chat', screen: 'main' }, ''); } catch {}
+      setShowExitConfirmModal(true);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [currentUser]);
+
+  // Browser/Tab close and reload protection (إشعار تأكيد المغادرة عند تحديث الصفحة أو إغلاق المتصفح)
+  useEffect(() => {
+    if (!currentUser) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = 'هل تريد مغادرة الشات؟';
+      return 'هل تريد مغادرة الشات؟';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [currentUser]);
 
   // Detect Real Country Flag automatically based on IP geo / timezone
   useEffect(() => {
@@ -2307,6 +2439,32 @@ export default function App() {
             lastTypedAt: Date.now()
           }
         ];
+      });
+    });
+
+    // Real-time PM typing indicator listener (استقبال وتحديث حالة جاري الكتابة في المحادثات الخاصة)
+    s.on('userPmTyping', (data: {
+      fromUserId: string;
+      fromUsername: string;
+      avatarUrl?: string;
+      nameBannerUrl?: string;
+      isTyping: boolean;
+    }) => {
+      if (!data || !data.fromUsername) return;
+      const key = data.fromUsername.trim().toLowerCase();
+      setPmTypingUsers((prev) => {
+        const next = { ...prev };
+        if (data.isTyping) {
+          next[key] = {
+            username: data.fromUsername,
+            avatarUrl: data.avatarUrl,
+            nameBannerUrl: data.nameBannerUrl,
+            lastTypedAt: Date.now()
+          };
+        } else {
+          delete next[key];
+        }
+        return next;
       });
     });
 
@@ -9807,18 +9965,27 @@ export default function App() {
                         <span>{selectedPmUser.flag}</span>
                       </div>
                       <div className="text-[10px] text-slate-500 flex items-center gap-1">
-                        {(() => {
-                          const matched = allConnectedUsers.find((u) => u.username.toLowerCase() === selectedPmUser.username.toLowerCase()) || rosterUsers.find((u) => u.username.toLowerCase() === selectedPmUser.username.toLowerCase());
-                          const state = matched?.presenceState || selectedPmUser.presenceState || (matched ? 'online' : 'offline');
-                          return state === 'away' ? (
-                            <span className="text-amber-600 font-bold">في الخلفية 🟡</span>
-                          ) : state === 'offline' ? (
-                            <span className="text-slate-400 font-medium">غير متصل ⚪</span>
-                          ) : (
-                            <span className="text-emerald-600 font-bold">متواجد ونشط 🟢</span>
-                          );
-                        })()}
-                        {selectedPmUser.statusQuote && <span>• {selectedPmUser.statusQuote}</span>}
+                        {Boolean(pmTypingUsers[selectedPmUser.username.trim().toLowerCase()]) ? (
+                          <span className="text-amber-500 font-bold flex items-center gap-1 animate-pulse">
+                            <span>يكتب الآن...</span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                          </span>
+                        ) : (
+                          <>
+                            {(() => {
+                              const matched = allConnectedUsers.find((u) => u.username.toLowerCase() === selectedPmUser.username.toLowerCase()) || rosterUsers.find((u) => u.username.toLowerCase() === selectedPmUser.username.toLowerCase());
+                              const state = matched?.presenceState || selectedPmUser.presenceState || (matched ? 'online' : 'offline');
+                              return state === 'away' ? (
+                                <span className="text-amber-600 font-bold">في الخلفية 🟡</span>
+                              ) : state === 'offline' ? (
+                                <span className="text-slate-400 font-medium">غير متصل ⚪</span>
+                              ) : (
+                                <span className="text-emerald-600 font-bold">متواجد ونشط 🟢</span>
+                              );
+                            })()}
+                            {selectedPmUser.statusQuote && <span>• {selectedPmUser.statusQuote}</span>}
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -10195,6 +10362,18 @@ export default function App() {
                     </div>
                   )}
 
+                  {/* Real-time PM Typing Indicator Banner (مؤشر جاري الكتابة في الخاص) */}
+                  {selectedPmUser && Boolean(pmTypingUsers[selectedPmUser.username.trim().toLowerCase()]) && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 mb-1.5 bg-amber-500/10 border border-amber-500/40 rounded-xl text-amber-300 text-xs font-bold animate-in fade-in slide-in-from-bottom-1 duration-150 shadow-xs">
+                      <div className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                      <span>{selectedPmUser.username} يكتب الآن... ✍️</span>
+                    </div>
+                  )}
+
                   {selectedPmUser?.isPmDisabled && currentUser?.role !== 'admin' && currentUser?.role !== 'super' ? (
                     <div className="p-3 bg-rose-950/80 border border-rose-500/50 rounded-xl text-center text-xs text-rose-200 font-bold flex items-center justify-center gap-2 shadow-inner">
                       <Lock className="w-4 h-4 text-rose-400 shrink-0" />
@@ -10362,10 +10541,14 @@ export default function App() {
                         placeholder={`اكتب رسالة خاصة إلى ${selectedPmUser.username}...`}
                         value={pmInput}
                         style={{ color: settingTextColor || curTheme.recommendedTextColor || '#fef3c7' }}
-                        onChange={(e) => setPmInput(e.target.value)}
+                        onChange={(e) => {
+                          setPmInput(e.target.value);
+                          notifyPmTyping(e.target.value.trim().length > 0);
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && !e.shiftKey && pmInput.trim()) {
                             e.preventDefault();
+                            notifyPmTyping(false);
                             const expandedText = expandClientShortcuts(pmInput.trim(), shortcuts);
                             socket?.emit('privateMessage', {
                               toId: selectedPmUser.id,
@@ -10383,6 +10566,7 @@ export default function App() {
                       <button
                         onClick={() => {
                           if (pmInput.trim()) {
+                            notifyPmTyping(false);
                             const expandedText = expandClientShortcuts(pmInput.trim(), shortcuts);
                             socket?.emit('privateMessage', {
                               toId: selectedPmUser.id,
@@ -13905,6 +14089,52 @@ export default function App() {
           </div>
         )}
 
+        {/* Mobile Back Button Accidentally Pressed / Exit Confirmation Modal (إشعار تأكيد مغادرة الشات) */}
+        {showExitConfirmModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in" dir="rtl">
+            <div className="bg-[#18110b] border-2 border-amber-500/80 rounded-2xl w-full max-w-sm p-5 text-center shadow-2xl space-y-4 text-white animate-in zoom-in-95 duration-150">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-amber-500/20 via-rose-500/20 to-amber-500/30 text-amber-400 border-2 border-amber-500/60 flex items-center justify-center mx-auto shadow-lg animate-bounce">
+                <AlertTriangle className="w-8 h-8 text-amber-400" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base font-black text-amber-300">
+                  هل تريد مغادرة الشات؟
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                  لقد ضغطت على زر الرجوع. هل تود البقاء في الدردشة أم تأكيد الخروج وإنهاء جلستك الحالية؟
+                </p>
+              </div>
+              <div className="p-3 bg-amber-950/40 border border-amber-500/30 rounded-xl text-[11px] text-amber-200/90 text-right space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>تنبيه الحماية من الخروج غير المقصود:</span>
+                </div>
+                <div>• يمكنك الضغط على "البقاء في الشات" للاستمرار في محادثاتك دون انقطاع.</div>
+              </div>
+              <div className="flex flex-col gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowExitConfirmModal(false)}
+                  className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-black rounded-xl text-xs shadow-lg transition-transform active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>🦅</span>
+                  <span>البقاء في الشات (إلغاء الخروج)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExitConfirmModal(false);
+                    handleExitChat();
+                  }}
+                  className="w-full py-2.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-300 hover:text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                  <span>نعم، تأكيد الخروج من الشات 🚪</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
